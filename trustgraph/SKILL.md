@@ -19,21 +19,30 @@ Sistema de memoria basado en grafos de conocimiento que:
 
 - Docker y Docker Compose instalados
 - Python 3.x con `httpx` (`pip install httpx`)
-- API key de LLM (OpenAI, Anthropic, o Ollama local)
+- API key de LLM (OpenAI, Anthropic, Z.AI, Kimi, MiniMax, o Ollama local)
 
 ## Flujos de Trabajo
 
 ### 1. Setup Inicial (Primera vez)
 
+**Opción A - Wizard Interactivo (Recomendado):**
 ```bash
-# 1. Configurar variables de entorno
+# Setup completo con menús navegables
+./setup.sh makeenv
+# ↑↓ para navegar, ENTER para seleccionar
+
+# O usando make:
+make makeenv
+```
+
+**Opción B - Setup Manual:**
+```bash
+# 1. Configurar variables de entorno manualmente
 cp .env.example .env
-# Editar .env con API keys
+nano .env  # Editar con tus API keys
 
 # 2. Crear directorios de datos
 make setup
-# O manualmente:
-mkdir -p data/{cassandra,qdrant,garage,pulsar,prometheus,grafana,loki}
 ```
 
 ### 2. Iniciar TrustGraph
@@ -103,6 +112,7 @@ make reset
 | Comando | Descripción |
 |---------|-------------|
 | `make help` | Ver todos los comandos |
+| `make makeenv` | Wizard interactivo de configuración |
 | `make setup` | Configuración inicial |
 | `make up` | Iniciar servicios |
 | `make down` | Detener servicios |
@@ -111,6 +121,7 @@ make reset
 | `make logs` | Ver logs |
 | `make load` | Cargar documentación |
 | `make query` | Modo interactivo |
+| `make provider` | Cambiar de proveedor LLM |
 | `make search QUERY="..."` | Búsqueda rápida |
 | `make clean` | Limpieza total |
 | `make backup` | Crear backup |
@@ -121,9 +132,24 @@ make reset
 Variables esenciales:
 
 ```bash
-# Proveedor de LLM
-LLM_PROVIDER=openai              # o anthropic, ollama
+# Proveedor de LLM: openai, anthropic, zai, kimi, minimax, ollama
+LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-your-key
+
+# O usar Z.AI (智谱AI/GLM)
+LLM_PROVIDER=zai
+ZAI_API_KEY=your-zai-key
+ZAI_MODEL=glm-5
+
+# O usar Kimi (Moonshot AI)
+LLM_PROVIDER=kimi
+KIMI_API_KEY=sk-kimi-your-key
+KIMI_MODEL=kimi-k2
+
+# O usar MiniMax
+LLM_PROVIDER=minimax
+MINIMAX_API_KEY=your-minimax-key
+MINIMAX_MODEL=MiniMax-M2.5
 
 # Ollama local
 LLM_PROVIDER=ollama
@@ -132,6 +158,31 @@ OLLAMA_BASE_URL=http://host.docker.internal:11434
 # Configuración del proyecto
 CONTEXT_CORE_ID=documentation
 COLLECTION_NAME=docs
+```
+
+### Cambio Rápido de Proveedor
+
+**Wizard Interactivo (recomendado para configuración inicial):**
+```bash
+# Configuración completa con menús navegables
+make makeenv
+# ↑↓ para navegar entre proveedores, ENTER para seleccionar
+```
+
+**Cambio rápido de proveedor:**
+```bash
+# Ver estado actual y menú interactivo
+make provider
+
+# Cambiar directamente a cualquier proveedor
+make provider USE=zai       # Z.AI (GLM-5)
+make provider USE=kimi      # Kimi (K2)
+make provider USE=minimax   # MiniMax (M2.5)
+make provider USE=openai    # OpenAI (GPT-4o)
+make provider USE=ollama    # Modelos locales
+
+# Reiniciar para aplicar cambios
+docker compose restart
 ```
 
 ## API REST

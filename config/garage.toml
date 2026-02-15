@@ -4,20 +4,26 @@
 metadata_dir = "/var/lib/garage/meta"
 data_dir = "/var/lib/garage/data"
 
+rpc_secret = "7991508a33a723ca897fb03670b70d17fd52b7c1f9fc2e585d70e011c4a93e00"
+
 replication_mode = "none"
 
 rpc_bind_addr = "[::]:3901"
-consul_discovery = false
 
 [s3_api]
 api_bind_addr = "[::]:3900"
 root_domain = ".localhost"
+s3_region = "us-east-1"
 
 [s3_web]
 enable = false
+bind_addr = "[::]:3902"
+root_domain = ".localhost"
 
 [k2v_api]
 enable = false
+api_bind_addr = "[::]:3904"
 
 [admin]
 enable = false
+bind_addr = "[::]:3903"

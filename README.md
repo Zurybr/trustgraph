@@ -23,23 +23,32 @@ Para una guía paso a paso detallada, ver [README_DUMMIES.md](README_DUMMIES.md)
 
 ## 🚀 Quick Start (Manual)
 
+### Opción A - Setup con Wizard Interactivo (Recomendado)
+
+```bash
+# 1. Configuración interactiva con menús navegables
+./setup.sh makeenv
+# ↑↓ para navegar, ENTER para seleccionar proveedor
+
+# 2. Iniciar TrustGraph
+make up
+
+# 3. Cargar documentación
+make load
+
+# 4. Acceder al Workbench
+open http://localhost:8888
+```
+
+### Opción B - Setup Manual
+
 ```bash
 # 1. Configurar variables de entorno
 cp .env.example .env
-# Editar .env con tus API keys
+# Editar .env con tus API keys manualmente
 
-# 2. Iniciar TrustGraph
-docker compose up -d
-
-# 3. Esperar a que los servicios estén listos (1-2 minutos)
-docker compose ps
-
-# 4. Cargar documentación del workspace
-pip install httpx  # o requests
-python scripts/load_docs.py
-
-# 5. Acceder al Workbench
-open http://localhost:8888
+# 2-4. Igual que Opción A
+make up && make load
 ```
 
 ## 📁 Estructura del Proyecto
@@ -146,9 +155,13 @@ curl -X POST http://localhost:8080/api/v1/search/vector \
 ### Variables de Entorno
 
 ```bash
-# LLM Provider (openai, anthropic, ollama)
+# LLM Provider: openai, anthropic, zai, kimi, minimax, ollama
 LLM_PROVIDER=openai
 OPENAI_API_KEY=sk-your-key
+
+# O usar modelos chinos (Z.AI GLM, Kimi, MiniMax)
+LLM_PROVIDER=zai
+ZAI_API_KEY=your-zai-key
 
 # O usar Ollama local
 LLM_PROVIDER=ollama
@@ -158,6 +171,43 @@ OLLAMA_BASE_URL=http://host.docker.internal:11434
 CONTEXT_CORE_ID=documentation
 COLLECTION_NAME=docs
 ```
+
+### Cambio Rápido de Proveedor
+
+**Wizard Interactivo (con menús navegables):**
+```bash
+# Configuración completa con flechas ↑↓ para navegar
+make makeenv
+# o
+./setup.sh makeenv
+```
+
+**Comando General Rápido:**
+```bash
+# Ver menú interactivo
+make provider
+
+# Cambiar directamente a cualquier proveedor
+make provider USE=zai       # Z.AI (GLM-5)
+make provider USE=kimi      # Kimi (K2)
+make provider USE=minimax   # MiniMax (M2.5)
+make provider USE=openai    # OpenAI (GPT-4o)
+make provider USE=ollama    # Ollama local
+
+# Reiniciar para aplicar cambios
+docker compose restart
+```
+
+### Proveedores Soportados
+
+| Proveedor | Modelos | Tipo API |
+|-----------|---------|----------|
+| OpenAI | GPT-4, GPT-4o, GPT-3.5 | OpenAI |
+| Anthropic | Claude 3.5 Sonnet, Claude 3 Opus | Anthropic |
+| **Z.AI (智谱AI)** | **GLM-5, GLM-4.6V** | OpenAI-compatible |
+| **Kimi** | **Kimi K2, Kimi Code** | Anthropic-compatible |
+| **MiniMax** | **MiniMax-M2.5** | Anthropic-compatible |
+| Ollama | llama3.1, qwen, etc. | Local |
 
 ### Recursos Requeridos
 

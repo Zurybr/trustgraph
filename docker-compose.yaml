@@ -1,6 +1,6 @@
 # TrustGraph - Docker Compose Configuration
 # Sistema Operativo de Contexto para Agentes de IA
-# 
+#
 # Uso:
 #   docker compose up -d          # Iniciar todos los servicios
 #   docker compose down           # Detener servicios
@@ -12,8 +12,15 @@
 #   - Grafana:         http://localhost:3000
 #   - Prometheus:      http://localhost:9090
 #   - Qdrant:          http://localhost:6333
-
-version: "3.8"
+#
+# CONFIGURACIÓN DE PROVEEDOR LLM:
+# Edita .env y cambia LLM_PROVIDER según necesites:
+#   - openai    : GPT-4, GPT-3.5
+#   - anthropic : Claude
+#   - zai       : GLM-5, GLM-4.6V (OpenAI-compatible)
+#   - kimi      : Kimi K2 (Anthropic-compatible)
+#   - minimax   : MiniMax-M2.5 (Anthropic-compatible)
+#   - ollama    : Modelos locales
 
 services:
   # ============================================================================
@@ -27,10 +34,9 @@ services:
     command: bin/pulsar standalone
     ports:
       - "6650:6650"   # Pulsar binary protocol
-      - "8081:8080"   # Pulsar HTTP API (cambiado para evitar conflicto)
+      - "8081:8080"   # Pulsar HTTP API
     volumes:
-      - ./data/pulsar/data:/pulsar/data
-      - ./data/pulsar/conf:/pulsar/conf
+      - pulsar-data:/pulsar/data
     environment:
       - PULSAR_MEM=-Xms512m -Xmx512m
     healthcheck:
@@ -38,7 +44,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 60s
+      start_period: 120s
     networks:
       - trustgraph-network
     restart: unless-stopped
@@ -80,25 +86,11 @@ services:
     environment:
       - QDRANT__LOG_LEVEL=INFO
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      test: ["CMD", "bash", "-c", "exec 3<>/dev/tcp/localhost/6333 && echo -e 'GET /healthz HTTP/1.1\r\nHost: localhost\r\nConnection: close\r\n\r\n' >&3 && cat <&3 | grep -q '200 OK'"]
       interval: 30s
       timeout: 10s
-      retries: 3
-    networks:
-      - trustgraph-network
-    restart: unless-stopped
-
-  # Garage - Object Storage (S3-compatible)
-  garage:
-    image: dxflrs/garage:v1.0.0
-    container_name: tg-garage
-    ports:
-      - "3900:3900"
-      - "3901:3901"
-    volumes:
-      - ./data/garage:/var/lib/garage
-      - ./config/garage.toml:/etc/garage.toml:ro
-    command: ["-c", "/etc/garage.toml"]
+      retries: 5
+      start_period: 30s
     networks:
       - trustgraph-network
     restart: unless-stopped
@@ -107,21 +99,104 @@ services:
   # SERVICIOS TRUSTGRAPH
   # ============================================================================
 
-  # API Gateway - Entry point for REST/WebSocket
+  # API Gateway - Entry point for REST API
   api-gateway:
-    image: trustgraphai/api-gateway:latest
+    image: trustgraph/trustgraph-flow:1.8.19
     container_name: tg-api-gateway
+    command: api-gateway --pulsar-host pulsar://pulsar:6650 --port 8080
     ports:
       - "8080:8080"
     environment:
-      - PULSAR_URL=pulsar://pulsar:6650
-      - CASSANDRA_HOST=cassandra
-      - QDRANT_URL=http://qdrant:6333
-      - LOG_LEVEL=INFO
+      - PULSAR_HOST=pulsar://pulsar:6650
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Provider selection
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      # OpenAI-compatible providers
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - ZAI_API_KEY=${ZAI_API_KEY:-}
+      - ZAI_BASE_URL=${ZAI_BASE_URL:-https://api.z.ai/api/paas/v4}
+      - ZAI_MODEL=${ZAI_MODEL:-glm-5}
+      # Anthropic-compatible providers
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+      - KIMI_API_KEY=${KIMI_API_KEY:-}
+      - KIMI_BASE_URL=${KIMI_BASE_URL:-https://api.kimi.com/coding}
+      - KIMI_MODEL=${KIMI_MODEL:-kimi-k2}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.io/anthropic}
+      - MINIMAX_MODEL=${MINIMAX_MODEL:-MiniMax-M2.5}
+      # Ollama
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
+    depends_on:
+      pulsar:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Graph RAG Service
+  graph-rag:
+    image: trustgraph/trustgraph-flow:1.8.19
+    container_name: tg-graph-rag
+    command: graph-rag --pulsar-host pulsar://pulsar:6650
+    environment:
+      - PULSAR_HOST=pulsar://pulsar:6650
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Provider selection
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      # OpenAI-compatible providers
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - ZAI_API_KEY=${ZAI_API_KEY:-}
+      - ZAI_BASE_URL=${ZAI_BASE_URL:-https://api.z.ai/api/paas/v4}
+      - ZAI_MODEL=${ZAI_MODEL:-glm-5}
+      # Anthropic-compatible providers
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+      - KIMI_API_KEY=${KIMI_API_KEY:-}
+      - KIMI_BASE_URL=${KIMI_BASE_URL:-https://api.kimi.com/coding}
+      - KIMI_MODEL=${KIMI_MODEL:-kimi-k2}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.io/anthropic}
+      - MINIMAX_MODEL=${MINIMAX_MODEL:-MiniMax-M2.5}
+      # Ollama
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
     depends_on:
       pulsar:
         condition: service_healthy
       cassandra:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Document Embeddings
+  doc-embeddings:
+    image: trustgraph/trustgraph-flow:1.8.19
+    container_name: tg-doc-embeddings
+    command: document-embeddings --pulsar-host pulsar://pulsar:6650
+    environment:
+      - PULSAR_HOST=pulsar://pulsar:6650
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Embeddings configuration
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-openai}
+      - EMBEDDING_MODEL=${EMBEDDING_MODEL:-text-embedding-3-small}
+      # OpenAI-compatible (used for openai, zai embeddings)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - ZAI_API_KEY=${ZAI_API_KEY:-}
+      - ZAI_BASE_URL=${ZAI_BASE_URL:-https://api.z.ai/api/paas/v4}
+      # Ollama
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+    depends_on:
+      pulsar:
         condition: service_healthy
       qdrant:
         condition: service_healthy
@@ -129,168 +204,54 @@ services:
       - trustgraph-network
     restart: unless-stopped
 
-  # Workbench UI - Interfaz web
+  # LLM Gateway - Routing entre proveedores (opcional, para configuración avanzada)
+  # Este servicio puede usarse para centralizar la lógica de proveedores
+  llm-gateway:
+    image: trustgraph/trustgraph-flow:1.8.19
+    container_name: tg-llm-gateway
+    command: llm-gateway --pulsar-host pulsar://pulsar:6650
+    environment:
+      - PULSAR_HOST=pulsar://pulsar:6650
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
+      # Provider selection
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      # All provider configs (same as above)
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - OPENAI_BASE_URL=${OPENAI_BASE_URL:-https://api.openai.com/v1}
+      - OPENAI_MODEL=${OPENAI_MODEL:-gpt-4o}
+      - ZAI_API_KEY=${ZAI_API_KEY:-}
+      - ZAI_BASE_URL=${ZAI_BASE_URL:-https://api.z.ai/api/paas/v4}
+      - ZAI_MODEL=${ZAI_MODEL:-glm-5}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - ANTHROPIC_BASE_URL=${ANTHROPIC_BASE_URL:-https://api.anthropic.com}
+      - ANTHROPIC_MODEL=${ANTHROPIC_MODEL:-claude-3-5-sonnet-20241022}
+      - KIMI_API_KEY=${KIMI_API_KEY:-}
+      - KIMI_BASE_URL=${KIMI_BASE_URL:-https://api.kimi.com/coding}
+      - KIMI_MODEL=${KIMI_MODEL:-kimi-k2}
+      - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
+      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.io/anthropic}
+      - MINIMAX_MODEL=${MINIMAX_MODEL:-MiniMax-M2.5}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
+    depends_on:
+      pulsar:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+    profiles: ["advanced"]  # Solo inicia con: docker compose --profile advanced up
+
+  # Workbench UI - Interfaz web oficial
   workbench:
-    image: trustgraphai/workbench:latest
+    image: trustgraph/workbench-ui:latest
     container_name: tg-workbench
     ports:
-      - "8888:8888"
+      - "8888:8080"
     environment:
-      - API_GATEWAY_URL=http://api-gateway:8080
-      - LOG_LEVEL=INFO
+      - TRUSTGRAPH_URL=http://api-gateway:8080
+      - LOG_LEVEL=${LOG_LEVEL:-INFO}
     depends_on:
       - api-gateway
-    networks:
-      - trustgraph-network
-    restart: unless-stopped
-
-  # ============================================================================
-  # PROCESAMIENTO DE DOCUMENTOS
-  # ============================================================================
-
-  # Text Load Service - Ingesta de documentos
-  text-load:
-    image: trustgraphai/text-load:latest
-    container_name: tg-text-load
-    environment:
-      - PULSAR_URL=pulsar://pulsar:6650
-      - LOG_LEVEL=INFO
-    depends_on:
-      pulsar:
-        condition: service_healthy
-    networks:
-      - trustgraph-network
-    restart: unless-stopped
-
-  # Document Processor - OCR y extracción
-  doc-processor:
-    image: trustgraphai/doc-processor:latest
-    container_name: tg-doc-processor
-    environment:
-      - PULSAR_URL=pulsar://pulsar:6650
-      - LOG_LEVEL=INFO
-    depends_on:
-      pulsar:
-        condition: service_healthy
-    networks:
-      - trustgraph-network
-    restart: unless-stopped
-
-  # Knowledge Builder - Construcción del grafo
-  knowledge-builder:
-    image: trustgraphai/knowledge-builder:latest
-    container_name: tg-knowledge-builder
-    environment:
-      - PULSAR_URL=pulsar://pulsar:6650
-      - CASSANDRA_HOST=cassandra
-      - QDRANT_URL=http://qdrant:6333
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      - LOG_LEVEL=INFO
-    depends_on:
-      pulsar:
-        condition: service_healthy
-      cassandra:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
-    networks:
-      - trustgraph-network
-    restart: unless-stopped
-
-  # Embeddings Service
-  embeddings:
-    image: trustgraphai/embeddings:latest
-    container_name: tg-embeddings
-    environment:
-      - PULSAR_URL=pulsar://pulsar:6650
-      - QDRANT_URL=http://qdrant:6333
-      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-openai}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - LOG_LEVEL=INFO
-    depends_on:
-      pulsar:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
-    networks:
-      - trustgraph-network
-    restart: unless-stopped
-
-  # ============================================================================
-  # GraphRAG Y QUERY
-  # ============================================================================
-
-  # GraphRAG Service
-  graphrag:
-    image: trustgraphai/graphrag:latest
-    container_name: tg-graphrag
-    environment:
-      - PULSAR_URL=pulsar://pulsar:6650
-      - CASSANDRA_HOST=cassandra
-      - QDRANT_URL=http://qdrant:6333
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      - LOG_LEVEL=INFO
-    depends_on:
-      pulsar:
-        condition: service_healthy
-      cassandra:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
-    networks:
-      - trustgraph-network
-    restart: unless-stopped
-
-  # Retrieval Service
-  retrieval:
-    image: trustgraphai/retrieval:latest
-    container_name: tg-retrieval
-    environment:
-      - PULSAR_URL=pulsar://pulsar:6650
-      - CASSANDRA_HOST=cassandra
-      - QDRANT_URL=http://qdrant:6333
-      - LOG_LEVEL=INFO
-    depends_on:
-      pulsar:
-        condition: service_healthy
-      cassandra:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
-    networks:
-      - trustgraph-network
-    restart: unless-stopped
-
-  # ============================================================================
-  # AGENT Y LLM
-  # ============================================================================
-
-  # Agent Runtime
-  agent-runtime:
-    image: trustgraphai/agent-runtime:latest
-    container_name: tg-agent-runtime
-    environment:
-      - PULSAR_URL=pulsar://pulsar:6650
-      - CASSANDRA_HOST=cassandra
-      - QDRANT_URL=http://qdrant:6333
-      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
-      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      - LOG_LEVEL=INFO
-    depends_on:
-      pulsar:
-        condition: service_healthy
-      cassandra:
-        condition: service_healthy
-      qdrant:
-        condition: service_healthy
     networks:
       - trustgraph-network
     restart: unless-stopped
@@ -312,8 +273,6 @@ services:
       - '--config.file=/etc/prometheus/prometheus.yml'
       - '--storage.tsdb.path=/prometheus'
       - '--storage.tsdb.retention.time=15d'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
     networks:
       - trustgraph-network
     restart: unless-stopped
@@ -331,7 +290,6 @@ services:
       - GF_SECURITY_ADMIN_USER=admin
       - GF_SECURITY_ADMIN_PASSWORD=admin
       - GF_USERS_ALLOW_SIGN_UP=false
-      - GF_SERVER_ROOT_URL=http://localhost:3000
     depends_on:
       - prometheus
     networks:
@@ -366,6 +324,10 @@ services:
     networks:
       - trustgraph-network
     restart: unless-stopped
+
+volumes:
+  pulsar-data:
+    driver: local
 
 networks:
   trustgraph-network:

@@ -1,6 +1,14 @@
 #!/bin/bash
 # TrustGraph - Setup Script
-# Configura el entorno para TrustGraph
+# Punto de entrada principal para todas las operaciones de setup
+#
+# Uso:
+#   ./setup.sh                    # Menú interactivo completo
+#   ./setup.sh makeenv            # Wizard de configuración LLM
+#   ./setup.sh install-cli        # Instalar solo CLI
+#   ./setup.sh server             # Setup servidor local
+#   ./setup.sh remote             # Configurar acceso remoto
+#   ./setup.sh help               # Mostrar ayuda
 
 set -e
 
@@ -8,104 +16,155 @@ BLUE='\033[36m'
 GREEN='\033[32m'
 YELLOW='\033[33m'
 RED='\033[31m'
+CYAN='\033[35m'
+BOLD='\033[1m'
 RESET='\033[0m'
 
-echo -e "${BLUE}🔧 TrustGraph Setup${RESET}"
-echo "===================="
-echo ""
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Verificar Docker
-echo -e "${BLUE}📦 Verificando Docker...${RESET}"
-if ! command -v docker &> /dev/null; then
-    echo -e "${RED}❌ Docker no está instalado${RESET}"
-    echo "   Instala Docker: https://docs.docker.com/get-docker/"
-    exit 1
+print_header() {
+    echo ""
+    echo -e "${BOLD}${BLUE}╔══════════════════════════════════════════════════════════════╗${RESET}"
+    echo -e "${BOLD}${BLUE}║${RESET}     🤖 ${BOLD}TrustGraph Setup${RESET}                                      ${BLUE}║${RESET}"
+    echo -e "${BOLD}${BLUE}╚══════════════════════════════════════════════════════════════╝${RESET}"
+    echo ""
+}
+
+show_help() {
+    print_header
+    echo -e "${BOLD}Uso:${RESET} ./setup.sh [comando]"
+    echo ""
+    echo -e "${BOLD}Comandos disponibles:${RESET}"
+    echo ""
+    echo -e "  ${CYAN}(sin argumentos)${RESET}  Inicia el menú maestro interactivo"
+    echo ""
+    echo -e "  ${CYAN}makeenv${RESET}          Wizard de configuración de proveedor LLM"
+    echo -e "  ${CYAN}install-cli${RESET}      Instala solo la CLI 'trus'"
+    echo -e "  ${CYAN}server${RESET}           Setup completo del servidor local"
+    echo -e "  ${CYAN}remote${RESET}           Configura acceso remoto (para otros agentes)"
+    echo ""
+    echo -e "  ${CYAN}start${RESET}            Inicia TrustGraph"
+    echo -e "  ${CYAN}stop${RESET}             Detiene TrustGraph"
+    echo -e "  ${CYAN}status${RESET}           Muestra estado"
+    echo ""
+    echo -e "  ${CYAN}uninstall-cli${RESET}    Desinstala la CLI"
+    echo -e "  ${CYAN}uninstall-all${RESET}    Desinstala TODO (CLI + datos)"
+    echo ""
+    echo -e "  ${CYAN}help${RESET}             Muestra esta ayuda"
+    echo ""
+    echo -e "${BOLD}Ejemplos rápidos:${RESET}"
+    echo ""
+    echo -e "  ${YELLOW}# Instalación completa local:${RESET}"
+    echo -e "  ./setup.sh"
+    echo ""
+    echo -e "  ${YELLOW}# Solo CLI para conectar a servidor remoto:${RESET}"
+    echo -e "  ./setup.sh install-cli"
+    echo ""
+    echo -e "  ${YELLOW}# Configurar proveedor Z.AI (GLM):${RESET}"
+    echo -e "  ./setup.sh makeenv"
+    echo ""
+}
+
+# Si no hay argumentos, ejecutar menú maestro
+if [ $# -eq 0 ]; then
+    if [ -f "$SCRIPT_DIR/install/setup-master.sh" ]; then
+        exec "$SCRIPT_DIR/install/setup-master.sh"
+    else
+        echo -e "${RED}❌ No se encontró install/setup-master.sh${RESET}"
+        exit 1
+    fi
 fi
 
-if ! command -v docker-compose &> /dev/null && ! docker compose version &> /dev/null; then
-    echo -e "${RED}❌ Docker Compose no está instalado${RESET}"
-    echo "   Instala Docker Compose: https://docs.docker.com/compose/install/"
-    exit 1
-fi
+# Procesar comando
+case "${1:-}" in
+    makeenv)
+        print_header
+        if [ -f "$SCRIPT_DIR/scripts/setup_env.py" ]; then
+            python3 "$SCRIPT_DIR/scripts/setup_env.py"
+        else
+            echo -e "${RED}❌ Wizard no encontrado${RESET}"
+            exit 1
+        fi
+        ;;
 
-echo -e "${GREEN}✅ Docker OK${RESET}"
+    install-cli|cli)
+        if [ -f "$SCRIPT_DIR/install/install-cli.sh" ]; then
+            exec "$SCRIPT_DIR/install/install-cli.sh"
+        else
+            echo -e "${RED}❌ Instalador de CLI no encontrado${RESET}"
+            exit 1
+        fi
+        ;;
 
-# Verificar Python
-echo -e "${BLUE}🐍 Verificando Python...${RESET}"
-if ! command -v python3 &> /dev/null && ! command -v python &> /dev/null; then
-    echo -e "${RED}❌ Python no está instalado${RESET}"
-    exit 1
-fi
+    server|local)
+        if [ -f "$SCRIPT_DIR/install/setup-local.sh" ]; then
+            exec "$SCRIPT_DIR/install/setup-local.sh"
+        else
+            echo -e "${RED}❌ Setup local no encontrado${RESET}"
+            exit 1
+        fi
+        ;;
 
-PYTHON_CMD=$(command -v python3 || command -v python)
-echo -e "${GREEN}✅ Python: $PYTHON_CMD${RESET}"
+    remote|server-remote)
+        if [ -f "$SCRIPT_DIR/install/setup-server.sh" ]; then
+            exec "$SCRIPT_DIR/install/setup-server.sh"
+        else
+            echo -e "${RED}❌ Setup remoto no encontrado${RESET}"
+            exit 1
+        fi
+        ;;
 
-# Crear .env si no existe
-echo ""
-echo -e "${BLUE}⚙️  Configurando entorno...${RESET}"
+    start|up)
+        cd "$SCRIPT_DIR"
+        make up
+        ;;
 
-if [ ! -f .env ]; then
-    cp .env.example .env
-    echo -e "${GREEN}✅ Archivo .env creado${RESET}"
-    echo -e "${YELLOW}⚠️  IMPORTANTE: Edita .env con tus API keys${RESET}"
-else
-    echo -e "${YELLOW}ℹ️  .env ya existe${RESET}"
-fi
+    stop|down)
+        cd "$SCRIPT_DIR"
+        make down
+        ;;
 
-# Crear directorios de datos
-echo ""
-echo -e "${BLUE}📁 Creando directorios...${RESET}"
-mkdir -p data/{cassandra,qdrant,garage,pulsar,prometheus,grafana,loki}
-echo -e "${GREEN}✅ Directorios creados${RESET}"
+    status)
+        cd "$SCRIPT_DIR"
+        make status
+        if command -v trus &> /dev/null; then
+            echo ""
+            trus status
+        fi
+        ;;
 
-# Instalar dependencias Python
-echo ""
-echo -e "${BLUE}📚 Verificando dependencias Python...${RESET}"
+    uninstall-cli)
+        if [ -f "$SCRIPT_DIR/install/uninstall-cli.sh" ]; then
+            exec "$SCRIPT_DIR/install/uninstall-cli.sh"
+        else
+            echo -e "${RED}❌ Desinstalador no encontrado${RESET}"
+            exit 1
+        fi
+        ;;
 
-# Verificar si httpx o requests están instalados
-if ! $PYTHON_CMD -c "import httpx" 2>/dev/null && ! $PYTHON_CMD -c "import requests" 2>/dev/null; then
-    echo -e "${YELLOW}⚠️  httpx no está instalado${RESET}"
-    echo "   Instalando httpx..."
-    pip install httpx || pip3 install httpx
-fi
+    uninstall-all|purge)
+        echo -e "${RED}💥 Esto eliminará TODO: CLI, servidor y datos${RESET}"
+        read -p "¿Confirmar? [escribe 'eliminar todo']: " confirm
+        if [ "$confirm" = "eliminar todo" ]; then
+            [ -f "$SCRIPT_DIR/install/uninstall-cli.sh" ] && "$SCRIPT_DIR/install/uninstall-cli.sh" || true
+            cd "$SCRIPT_DIR"
+            make down -v 2>/dev/null || true
+            docker system prune -f 2>/dev/null || true
+            rm -rf data/
+            echo -e "${GREEN}✅ Desinstalación completa${RESET}"
+        else
+            echo -e "${YELLOW}❌ Cancelado${RESET}"
+        fi
+        ;;
 
-echo -e "${GREEN}✅ Dependencias OK${RESET}"
+    help|--help|-h)
+        show_help
+        ;;
 
-# Verificar MCP SDK (opcional)
-echo ""
-echo -e "${BLUE}🔌 Verificando MCP SDK (opcional)...${RESET}"
-if ! $PYTHON_CMD -c "import mcp" 2>/dev/null; then
-    echo -e "${YELLOW}⚠️  MCP SDK no instalado (opcional para integración con Claude)${RESET}"
-    echo "   Instala con: pip install mcp"
-else
-    echo -e "${GREEN}✅ MCP SDK OK${RESET}"
-fi
-
-echo ""
-echo "===================="
-echo -e "${GREEN}✅ Setup completo!${RESET}"
-echo ""
-echo -e "${YELLOW}📝 Próximos pasos:${RESET}"
-echo ""
-echo "1. Configura tus API keys en .env:"
-echo "   nano .env"
-echo ""
-echo "2. Inicia TrustGraph:"
-echo "   docker compose up -d"
-echo "   # o: make up"
-echo ""
-echo "3. Espera 1-2 minutos y verifica:"
-echo "   docker compose ps"
-echo ""
-echo "4. Carga la documentación:"
-echo "   python scripts/load_docs.py"
-echo "   # o: make load"
-echo ""
-echo "5. Accede al Workbench:"
-echo "   http://localhost:8888"
-echo ""
-echo "📖 Comandos útiles:"
-echo "   make help     - Ver todos los comandos"
-echo "   make status   - Estado de servicios"
-echo "   make query    - Modo interactivo"
-echo ""
+    *)
+        echo -e "${RED}❌ Comando desconocido: $1${RESET}"
+        echo ""
+        show_help
+        exit 1
+        ;;
+esac
