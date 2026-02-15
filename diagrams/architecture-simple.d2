@@ -1,0 +1,256 @@
+# TrustGraph - Arquitectura Simple (Vista de Capas)
+
+direction: down
+
+# Título
+title: {
+  label: |md
+    # 🏗️ Arquitectura de TrustGraph
+    ## Como un Pastel de Capas
+  |
+  shape: text
+  style.font-size: 28
+  style.bold: true
+}
+
+# Capa 1: Tú (Usuario)
+capa1: {
+  label: |md
+    ### 👤 TÚ
+    ## Usuario
+    
+    Navegador / API / Scripts
+  |
+  shape: rectangle
+  style.fill: "#ffecb3"
+  style.stroke: "#ffa000"
+  style.stroke-width: 3
+  style.border-radius: 20
+  
+  # Tres formas de acceder
+  workbench: Workbench 🖥️ {
+    shape: rectangle
+    style.fill: "#fff"
+  }
+  
+  api: API 🔌 {
+    shape: rectangle
+    style.fill: "#fff"
+  }
+  
+  cli: Scripts 📝 {
+    shape: rectangle
+    style.fill: "#fff"
+  }
+}
+
+# Flecha
+arrow1: |md
+  Haces preguntas
+| {
+  shape: text
+  style.font-size: 14
+}
+
+# Capa 2: API Gateway
+capa2: {
+  label: |md
+    ### 🚪 API GATEWAY
+    ## El Portero
+    
+    Recibe tus preguntas
+    y las dirige
+  |
+  shape: rectangle
+  style.fill: "#c5cae9"
+  style.stroke: "#3f51b5"
+  style.stroke-width: 2
+  style.border-radius: 10
+}
+
+# Flecha
+arrow2: |md
+  Envía al
+  "cerebro"
+| {
+  shape: text
+  style.font-size: 14
+}
+
+# Capa 3: El Cerebro (Procesamiento)
+capa3: {
+  label: |md
+    ### 🧠 EL CEREBRO
+    ## Procesamiento
+  |
+  shape: rectangle
+  style.fill: "#e1bee7"
+  style.stroke: "#9c27b0"
+  style.stroke-width: 3
+  style.border-radius: 10
+  
+  graphrag: GraphRAG {
+    label: |md
+      **🎯 GraphRAG**
+      El Detective
+      
+      Busca respuestas
+      conectando pistas
+    |
+    shape: hexagon
+    style.fill: "#f3e5f5"
+  }
+  
+  builder: Knowledge Builder {
+    label: |md
+      **📚 Knowledge Builder**
+      El Estudioso
+      
+      Aprende de los
+      documentos
+    |
+    shape: hexagon
+    style.fill: "#f3e5f5"
+  }
+  
+  agent: Agent Runtime {
+    label: |md
+      **🤖 Agent Runtime**
+      El Razonador
+      
+      Piensa y decide
+    |
+    shape: hexagon
+    style.fill: "#f3e5f5"
+  }
+  
+  embeddings: Embeddings {
+    label: |md
+      **🔢 Embeddings**
+      El Traductor
+      
+      Convierte palabras
+      en números
+    |
+    shape: hexagon
+    style.fill: "#f3e5f5"
+  }
+}
+
+# Flecha
+arrow3: |md
+  Se comunican
+  vía mensajes
+| {
+  shape: text
+  style.font-size: 14
+}
+
+# Capa 4: Mensajería
+capa4: {
+  label: |md
+    ### 📡 APACHE PULSAR
+    ## El Sistema de Mensajes
+    
+    Como el sistema nervioso:
+    lleva mensajes entre partes
+  |
+  shape: rectangle
+  style.fill: "#b3e5fc"
+  style.stroke: "#03a9f4"
+  style.stroke-width: 2
+  style.border-radius: 10
+}
+
+# Flecha
+arrow4: |md
+  Guarda y
+  recupera datos
+| {
+  shape: text
+  style.font-size: 14
+}
+
+# Capa 5: Almacenamiento
+capa5: {
+  label: |md
+    ### 💾 ALMACENAMIENTO
+    ## La Memoria
+  |
+  shape: rectangle
+  style.fill: "#c8e6c9"
+  style.stroke: "#4caf50"
+  style.stroke-width: 3
+  style.border-radius: 10
+  
+  cassandra: Cassandra {
+    label: |md
+      **🕸️ Cassandra**
+      
+      El Grafo
+      
+      Guarda las
+      CONEXIONES entre
+      conceptos
+    |
+    shape: cylinder
+    style.fill: "#a5d6a7"
+  }
+  
+  qdrant: Qdrant {
+    label: |md
+      **📐 Qdrant**
+      
+      Los Vectores
+      
+      Guarda los
+      SIGNIFICADOS de
+      las palabras
+    |
+    shape: cylinder
+    style.fill: "#a5d6a7"
+  }
+  
+  garage: Garage {
+    label: |md
+      **📦 Garage**
+      
+      Archivos
+      
+      Guarda los
+      documentos
+      originales
+    |
+    shape: cylinder
+    style.fill: "#a5d6a7"
+  }
+}
+
+# Conexiones entre capas
+capa1 -> arrow1 -> capa2 -> arrow2 -> capa3 -> arrow3 -> capa4 -> arrow4 -> capa5: {
+  style.stroke: "#666"
+  style.stroke-width: 2
+}
+
+# Nota de analogía
+analogia: {
+  label: |md
+    ### 🎭 Analogía: Un Restaurante
+    
+    | Capa | Restaurante | TrustGraph |
+    |------|-------------|------------|
+    | **Tú** | Cliente | Usuario |
+    | **Workbench/API** | Mesa/Menú | Interfaz |
+    | **API Gateway** | Mesero | Recibe pide |
+    | **El Cerebro** | Cocina | Procesa |
+    | **Pulsar** | Sistema pedidos | Comunica |
+    | **Almacenamiento** | Despensa | Guarda todo |
+    
+    **GraphRAG** es el *Chef Ejecutivo* que sabe qué ingredientes (datos)
+    combinar para crear la receta perfecta (respuesta).
+  |
+  shape: text
+  style.font-size: 14
+}
+
+capa5 -> analogia: {style.stroke: "#fff"}

@@ -1,0 +1,138 @@
+# TrustGraph - Vista Simple (Antes vs Después)
+
+direction: right
+
+# Panel izquierdo: ANTES
+antes: {
+  label: |md
+    # ❌ ANTES
+    ## Búsqueda Tradicional
+  |
+  style.fill: "#ffebee"
+  style.stroke: "#e57373"
+  style.stroke-width: 3
+  
+  usuario: Usuario {
+    shape: person
+  }
+  
+  docs: Documentos {
+    shape: cylinder
+    style.fill: "#fff"
+    
+    doc1: README.md {
+      shape: page
+    }
+    doc2: setup.sh {
+      shape: page
+    }
+    doc3: config.yaml {
+      shape: page
+    }
+  }
+  
+  busqueda: Buscador {
+    shape: oval
+    style.fill: "#fff9c4"
+  }
+  
+  resultado: Resultado {
+    label: |md
+      **Archivos que contienen:**
+      "TrustGraph"
+      
+      - README.md ✓
+      - setup.sh ✓
+      
+      **❌ No entiende qué es**
+      **❌ No conecta ideas**
+    |
+    shape: page
+    style.fill: "#fff"
+  }
+  
+  usuario -> busqueda: "¿Qué es TrustGraph?"
+  docs -> busqueda: revisa texto
+  busqueda -> resultado: devuelve lista
+  resultado -> usuario: archivos
+}
+
+# Flecha del medio
+flecha: |md
+  # ➡️
+  # TRANSFORMA
+  # EN
+| {
+  shape: text
+  style.font-size: 24
+  style.bold: true
+}
+
+# Panel derecho: DESPUÉS
+despues: {
+  label: |md
+    # ✅ DESPUÉS
+    ## Con TrustGraph
+  |
+  style.fill: "#e8f5e9"
+  style.stroke: "#81c784"
+  style.stroke-width: 3
+  
+  usuario: Usuario {
+    shape: person
+  }
+  
+  trustgraph: TrustGraph 🧠 {
+    label: |md
+      **El "Cerebro"**
+      
+      GraphRAG
+    |
+    shape: hexagon
+    style.fill: "#e1bee7"
+    style.stroke: "#8e24aa"
+    style.stroke-width: 2
+  }
+  
+  grafo: Grafo de Conocimiento 🕸️ {
+    label: |md
+      **Mapa Mental Conectado**
+      
+      TrustGraph --es--> Sistema de Memoria
+      TrustGraph --usa--> Grafos
+      TrustGraph --ayuda--> IA
+      TrustGraph --mejora--> Precisión
+    |
+    shape: cloud
+    style.fill: "#bbdefb"
+    style.stroke: "#1976d2"
+    style.stroke-width: 2
+  }
+  
+  respuesta: Respuesta Inteligente {
+    label: |md
+      **TrustGraph es un sistema**
+      **de memoria que usa grafos**
+      **para conectar conocimiento.**
+      
+      ✅ Entiende conceptos
+      ✅ Conecta ideas
+      ✅ Da contexto completo
+      
+      *Basado en 5 documentos*
+    |
+    shape: page
+    style.fill: "#c8e6c9"
+    style.stroke: "#388e3c"
+    style.stroke-width: 2
+  }
+  
+  usuario -> trustgraph: "¿Qué es TrustGraph?"
+  trustgraph -> grafo: consulta
+  grafo -> trustgraph: contexto
+  trustgraph -> respuesta: genera
+  respuesta -> usuario: explicación
+}
+
+# Conectar paneles
+antes -> flecha -> despues: {style.stroke: "#666"; style.stroke-width: 2}

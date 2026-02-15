@@ -1,0 +1,74 @@
+# TrustGraph Context Core Configuration
+# Knowledge base para la documentación del workspace
+
+context_core:
+  id: "documentation"
+  name: "Workspace Documentation"
+  description: "Base de conocimiento con toda la documentación del workspace"
+  
+  # Esquema de entidades y relaciones
+  schema:
+    entity_types:
+      - Document
+      - Section
+      - Topic
+      - CodeSnippet
+      - APIEndpoint
+      - ArchitectureComponent
+      - Guide
+      - Tutorial
+      - ResearchPaper
+      
+    relation_types:
+      - contains
+      - references
+      - describes
+      - implements
+      - depends_on
+      - related_to
+      - part_of
+      - precedes
+      - follows
+      
+  # Colecciones
+  collections:
+    - name: "docs"
+      description: "Documentos principales del workspace"
+      retention_days: 365
+      auto_index: true
+      
+    - name: "api-docs"
+      description: "Documentación de APIs"
+      retention_days: 365
+      auto_index: true
+      
+    - name: "research"
+      description: "Investigaciones y papers"
+      retention_days: 730
+      auto_index: true
+      
+    - name: "guides"
+      description: "Guías y tutoriales"
+      retention_days: 365
+      auto_index: true
+
+  # Configuración de procesamiento
+  processing:
+    chunk_size: 1000
+    chunk_overlap: 200
+    extract_entities: true
+    extract_relations: true
+    generate_embeddings: true
+    
+  # Indexación
+  indexing:
+    vector_index: "hnsw"
+    graph_index: true
+    full_text_index: true
+    
+  # Políticas
+  policies:
+    access_control: "local_only"
+    encryption: false
+    backup_enabled: true
+    backup_schedule: "0 2 * * *"  # Diario a las 2 AM

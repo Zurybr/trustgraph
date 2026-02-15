@@ -1,0 +1,194 @@
+# TrustGraph - Cómo Funciona (Flujo Paso a Paso)
+
+direction: down
+
+# Título
+title: {
+  label: |md
+    # 🧠 Cómo Funciona TrustGraph
+    ## De Documentos a Respuestas Inteligentes
+  |
+  shape: text
+  style.font-size: 28
+  style.bold: true
+}
+
+# Paso 1: Documentos
+step1: {
+  label: |md
+    ### 📥 PASO 1
+    ## Tus Documentos
+    
+    README.md
+    guias/
+    codigo/
+    notas/
+  |
+  shape: rectangle
+  style.fill: "#e3f2fd"
+  style.stroke: "#2196f3"
+  style.stroke-width: 2
+  style.border-radius: 10
+}
+
+# Flecha 1
+arrow1: |md
+  El sistema los "lee"
+  y los "entiende"
+| {
+  shape: text
+  style.font-size: 14
+  style.italic: true
+}
+
+# Paso 2: Procesamiento
+step2: {
+  label: |md
+    ### ⚙️ PASO 2
+    ## Procesamiento
+    
+    🔤 Divide en partes
+    🏷️ Encuentra conceptos
+    🔗 Detecta relaciones
+    📊 Crea vectores
+  |
+  shape: rectangle
+  style.fill: "#fff3e0"
+  style.stroke: "#ff9800"
+  style.stroke-width: 2
+  style.border-radius: 10
+}
+
+# Flecha 2
+arrow2: |md
+  Guarda en dos
+  lugares especiales
+| {
+  shape: text
+  style.font-size: 14
+  style.italic: true
+}
+
+# Paso 3: Almacenamiento
+step3: {
+  label: |md
+    ### 💾 PASO 3
+    ## Almacenamiento
+  |
+  shape: rectangle
+  style.fill: "#f3e5f5"
+  style.stroke: "#9c27b0"
+  style.stroke-width: 2
+  style.border-radius: 10
+  
+  # Dos almacenamientos
+  grafo: {
+    label: |md
+      **Grafo 🕸️**
+      
+      Las CONEXIONES
+      entre ideas
+      
+      (Cassandra)
+    |
+    shape: cylinder
+    style.fill: "#e1bee7"
+    style.stroke: "#7b1fa2"
+  }
+  
+  vectores: {
+    label: |md
+      **Vectores 📐**
+      
+      El SIGNIFICADO
+      de las palabras
+      
+      (Qdrant)
+    |
+    shape: diamond
+    style.fill: "#b2dfdb"
+    style.stroke: "#00796b"
+  }
+  
+  grafo <-> vectores: se consultan juntos
+}
+
+# Flecha 3
+arrow3: |md
+  Tú haces
+  una pregunta
+| {
+  shape: text
+  style.font-size: 14
+  style.italic: true
+}
+
+# Paso 4: Consulta
+step4: {
+  label: |md
+    ### ❓ PASO 4
+    ## Tu Pregunta
+    
+    "¿Qué es TrustGraph?"
+  |
+  shape: oval
+  style.fill: "#e8f5e9"
+  style.stroke: "#4caf50"
+  style.stroke-width: 2
+  style.border-radius: 50
+}
+
+# Flecha 4
+arrow4: |md
+  GraphRAG busca
+  en el grafo y
+  los vectores
+| {
+  shape: text
+  style.font-size: 14
+  style.italic: true
+}
+
+# Paso 5: Respuesta
+step5: {
+  label: |md
+    ### 💡 PASO 5
+    ## Respuesta Inteligente
+    
+    "TrustGraph es un sistema de memoria
+    basado en grafos que conecta tu
+    documentación para que la IA entienda
+    contexto y relaciones."
+    
+    **Fuentes:**
+    - documentation/trustgraph/README.md
+    - documentation/ecosystem/trustgraph/...
+  |
+  shape: rectangle
+  style.fill: "#c8e6c9"
+  style.stroke: "#2e7d32"
+  style.stroke-width: 3
+  style.border-radius: 10
+}
+
+# Conexiones
+step1 -> arrow1 -> step2 -> arrow2 -> step3 -> arrow3 -> step4 -> arrow4 -> step5: {
+  style.stroke: "#666"
+  style.stroke-width: 2
+  style.stroke-dash: 5
+}
+
+# Nota al final
+nota: {
+  label: |md
+    **🎯 La Magia:** En lugar de buscar palabras exactas,
+    TrustGraph entiende el *significado* y las *conexiones*.
+    
+    Es como la diferencia entre buscar en un índice de libro
+    vs preguntarle a alguien que leyó el libro y entendió todo.
+  |
+  shape: text
+  style.font-size: 14
+}
+
+step5 -> nota: {style.stroke: "#fff"}

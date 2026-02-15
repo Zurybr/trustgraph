@@ -1,0 +1,23 @@
+# Garage Configuration File
+# Object Storage S3-compatible
+
+metadata_dir = "/var/lib/garage/meta"
+data_dir = "/var/lib/garage/data"
+
+replication_mode = "none"
+
+rpc_bind_addr = "[::]:3901"
+consul_discovery = false
+
+[s3_api]
+api_bind_addr = "[::]:3900"
+root_domain = ".localhost"
+
+[s3_web]
+enable = false
+
+[k2v_api]
+enable = false
+
+[admin]
+enable = false

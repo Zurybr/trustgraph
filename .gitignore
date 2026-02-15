@@ -1,0 +1,37 @@
+# TrustGraph - Git Ignore
+
+# Datos persistentes
+data/
+!data/.gitkeep
+
+# Configuración local
+.env
+.env.local
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+
+# Logs
+*.log
+logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Temporal
+*.tmp
+*.temp

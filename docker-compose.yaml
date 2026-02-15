@@ -1,0 +1,373 @@
+# TrustGraph - Docker Compose Configuration
+# Sistema Operativo de Contexto para Agentes de IA
+# 
+# Uso:
+#   docker compose up -d          # Iniciar todos los servicios
+#   docker compose down           # Detener servicios
+#   docker compose logs -f        # Ver logs
+#
+# Servicios expuestos:
+#   - Workbench UI:    http://localhost:8888
+#   - API Gateway:     http://localhost:8080
+#   - Grafana:         http://localhost:3000
+#   - Prometheus:      http://localhost:9090
+#   - Qdrant:          http://localhost:6333
+
+version: "3.8"
+
+services:
+  # ============================================================================
+  # INFRAESTRUCTURA BASE
+  # ============================================================================
+
+  # Apache Pulsar - Event Backbone
+  pulsar:
+    image: apachepulsar/pulsar:3.2.0
+    container_name: tg-pulsar
+    command: bin/pulsar standalone
+    ports:
+      - "6650:6650"   # Pulsar binary protocol
+      - "8081:8080"   # Pulsar HTTP API (cambiado para evitar conflicto)
+    volumes:
+      - ./data/pulsar/data:/pulsar/data
+      - ./data/pulsar/conf:/pulsar/conf
+    environment:
+      - PULSAR_MEM=-Xms512m -Xmx512m
+    healthcheck:
+      test: ["CMD", "bin/pulsar-admin", "brokers", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Apache Cassandra - Graph Database
+  cassandra:
+    image: cassandra:4.1.4
+    container_name: tg-cassandra
+    ports:
+      - "9042:9042"
+    volumes:
+      - ./data/cassandra:/var/lib/cassandra
+    environment:
+      - CASSANDRA_CLUSTER_NAME=TrustGraphCluster
+      - CASSANDRA_NUM_TOKENS=256
+      - CASSANDRA_RPC_ADDRESS=0.0.0.0
+      - CASSANDRA_BROADCAST_RPC_ADDRESS=127.0.0.1
+      - HEAP_NEWSIZE=512M
+      - MAX_HEAP_SIZE=1G
+    healthcheck:
+      test: ["CMD", "cqlsh", "-e", "describe keyspaces"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Qdrant - Vector Database
+  qdrant:
+    image: qdrant/qdrant:v1.9.0
+    container_name: tg-qdrant
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - ./data/qdrant:/qdrant/storage
+    environment:
+      - QDRANT__LOG_LEVEL=INFO
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Garage - Object Storage (S3-compatible)
+  garage:
+    image: dxflrs/garage:v1.0.0
+    container_name: tg-garage
+    ports:
+      - "3900:3900"
+      - "3901:3901"
+    volumes:
+      - ./data/garage:/var/lib/garage
+      - ./config/garage.toml:/etc/garage.toml:ro
+    command: ["-c", "/etc/garage.toml"]
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # SERVICIOS TRUSTGRAPH
+  # ============================================================================
+
+  # API Gateway - Entry point for REST/WebSocket
+  api-gateway:
+    image: trustgraphai/api-gateway:latest
+    container_name: tg-api-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      - PULSAR_URL=pulsar://pulsar:6650
+      - CASSANDRA_HOST=cassandra
+      - QDRANT_URL=http://qdrant:6333
+      - LOG_LEVEL=INFO
+    depends_on:
+      pulsar:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Workbench UI - Interfaz web
+  workbench:
+    image: trustgraphai/workbench:latest
+    container_name: tg-workbench
+    ports:
+      - "8888:8888"
+    environment:
+      - API_GATEWAY_URL=http://api-gateway:8080
+      - LOG_LEVEL=INFO
+    depends_on:
+      - api-gateway
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # PROCESAMIENTO DE DOCUMENTOS
+  # ============================================================================
+
+  # Text Load Service - Ingesta de documentos
+  text-load:
+    image: trustgraphai/text-load:latest
+    container_name: tg-text-load
+    environment:
+      - PULSAR_URL=pulsar://pulsar:6650
+      - LOG_LEVEL=INFO
+    depends_on:
+      pulsar:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Document Processor - OCR y extracción
+  doc-processor:
+    image: trustgraphai/doc-processor:latest
+    container_name: tg-doc-processor
+    environment:
+      - PULSAR_URL=pulsar://pulsar:6650
+      - LOG_LEVEL=INFO
+    depends_on:
+      pulsar:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Knowledge Builder - Construcción del grafo
+  knowledge-builder:
+    image: trustgraphai/knowledge-builder:latest
+    container_name: tg-knowledge-builder
+    environment:
+      - PULSAR_URL=pulsar://pulsar:6650
+      - CASSANDRA_HOST=cassandra
+      - QDRANT_URL=http://qdrant:6333
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - LOG_LEVEL=INFO
+    depends_on:
+      pulsar:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Embeddings Service
+  embeddings:
+    image: trustgraphai/embeddings:latest
+    container_name: tg-embeddings
+    environment:
+      - PULSAR_URL=pulsar://pulsar:6650
+      - QDRANT_URL=http://qdrant:6333
+      - EMBEDDING_PROVIDER=${EMBEDDING_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - LOG_LEVEL=INFO
+    depends_on:
+      pulsar:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # GraphRAG Y QUERY
+  # ============================================================================
+
+  # GraphRAG Service
+  graphrag:
+    image: trustgraphai/graphrag:latest
+    container_name: tg-graphrag
+    environment:
+      - PULSAR_URL=pulsar://pulsar:6650
+      - CASSANDRA_HOST=cassandra
+      - QDRANT_URL=http://qdrant:6333
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - LOG_LEVEL=INFO
+    depends_on:
+      pulsar:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Retrieval Service
+  retrieval:
+    image: trustgraphai/retrieval:latest
+    container_name: tg-retrieval
+    environment:
+      - PULSAR_URL=pulsar://pulsar:6650
+      - CASSANDRA_HOST=cassandra
+      - QDRANT_URL=http://qdrant:6333
+      - LOG_LEVEL=INFO
+    depends_on:
+      pulsar:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # AGENT Y LLM
+  # ============================================================================
+
+  # Agent Runtime
+  agent-runtime:
+    image: trustgraphai/agent-runtime:latest
+    container_name: tg-agent-runtime
+    environment:
+      - PULSAR_URL=pulsar://pulsar:6650
+      - CASSANDRA_HOST=cassandra
+      - QDRANT_URL=http://qdrant:6333
+      - LLM_PROVIDER=${LLM_PROVIDER:-openai}
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY:-}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - LOG_LEVEL=INFO
+    depends_on:
+      pulsar:
+        condition: service_healthy
+      cassandra:
+        condition: service_healthy
+      qdrant:
+        condition: service_healthy
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # ============================================================================
+  # OBSERVABILIDAD
+  # ============================================================================
+
+  # Prometheus - Métricas
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: tg-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./config/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./data/prometheus:/prometheus
+    command:
+      - '--config.file=/etc/prometheus/prometheus.yml'
+      - '--storage.tsdb.path=/prometheus'
+      - '--storage.tsdb.retention.time=15d'
+      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
+      - '--web.console.templates=/usr/share/prometheus/consoles'
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Grafana - Dashboards
+  grafana:
+    image: grafana/grafana:10.4.0
+    container_name: tg-grafana
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./data/grafana:/var/lib/grafana
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_SERVER_ROOT_URL=http://localhost:3000
+    depends_on:
+      - prometheus
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Loki - Logging
+  loki:
+    image: grafana/loki:2.9.0
+    container_name: tg-loki
+    ports:
+      - "3100:3100"
+    volumes:
+      - ./config/loki.yml:/etc/loki/local-config.yaml:ro
+      - ./data/loki:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+  # Promtail - Log collector
+  promtail:
+    image: grafana/promtail:2.9.0
+    container_name: tg-promtail
+    volumes:
+      - ./config/promtail.yml:/etc/promtail/config.yml:ro
+      - /var/log:/var/log:ro
+      - /var/lib/docker/containers:/var/lib/docker/containers:ro
+    command: -config.file=/etc/promtail/config.yml
+    depends_on:
+      - loki
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
+
+networks:
+  trustgraph-network:
+    driver: bridge
+    name: trustgraph-network
