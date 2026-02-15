@@ -209,3 +209,57 @@ ask: ## Consulta TrustGraph (usar: make ask Q="tu pregunta")
 	else \
 		trus query "$(Q)" 2>/dev/null || python3 scripts/query_graphrag.py "$(Q)"; \
 	fi
+
+# ═══════════════════════════════════════════════════════════════
+# COMANDOS DE AGENTES INTELIGENTES
+# ═══════════════════════════════════════════════════════════════
+
+agent-status: ## Muestra estado de los agentes
+	@echo "$(BLUE)🤖 Estado de Agentes TrustGraph$(RESET)"
+	@trus agente status 2>/dev/null || python3 -m agents.cli_integration agente status
+
+agent-index: ## Indexa archivo con Callímaco (usar: make agent-index RUTA=archivo.md)
+	@if [ -z "$(RUTA)" ]; then \
+		echo "$(RED)❌ Usa: make agent-index RUTA='archivo.md'$(RESET)"; \
+	else \
+		trus agente bibliotecario indexar "$(RUTA)" --verbose 2>/dev/null || \
+		python3 -m agents.cli_integration bibliotecario indexar "$(RUTA)"; \
+	fi
+
+agent-search: ## Investiga con Sócrates (usar: make agent-search Q="pregunta")
+	@if [ -z "$(Q)" ]; then \
+		echo "$(RED)❌ Usa: make agent-search Q='tu pregunta'$(RESET)"; \
+	else \
+		trus agente investigador preguntar "$(Q)" 2>/dev/null || \
+		python3 -m agents.cli_integration investigador preguntar "$(Q)"; \
+	fi
+
+agent-interactive: ## Modo interactivo con Sócrates
+	@echo "$(BLUE)🔍 Iniciando modo interactivo con Sócrates...$(RESET)"
+	@trus agente investigador preguntar -i 2>/dev/null || \
+	python3 -m agents.cli_integration investigador interactivo
+
+agent-sleep: ## Ejecuta ciclo de Morpheo (mantenimiento nocturno)
+	@echo "$(BLUE)🌙 Iniciando ciclo de Morpheo...$(RESET)"
+	@trus agente nocturno ciclo --intensidad normal 2>/dev/null || \
+	python3 -m agents.cli_integration nocturno ciclo
+
+agent-sleep-deep: ## Ejecuta ciclo profundo de Morpheo
+	@echo "$(BLUE)🌙 Iniciando ciclo profundo de Morpheo...$(RESET)"
+	@trus agente nocturno ciclo --intensidad profundo --duracion 720 2>/dev/null || \
+	python3 -m agents.cli_integration nocturno ciclo --intensidad profundo --duracion 720
+
+agent-install: ## Instala dependencias de agentes
+	@echo "$(BLUE)📦 Instalando dependencias de agentes...$(RESET)"
+	@pip install -r agents/requirements.txt
+	@echo "$(GREEN)✅ Dependencias instaladas$(RESET)"
+
+agent-test: ## Prueba los agentes
+	@echo "$(BLUE)🧪 Probando agentes...$(RESET)"
+	@echo "$(CYAN)1. Testing Callímaco...$(RESET)"
+	@python3 -c "from agents.callimaco import CallimacoAgent; print('Callímaco OK')"
+	@echo "$(CYAN)2. Testing Sócrates...$(RESET)"
+	@python3 -c "from agents.socrates import SocratesAgent; print('Sócrates OK')"
+	@echo "$(CYAN)3. Testing Morpheo...$(RESET)"
+	@python3 -c "from agents.morpheo import MorpheoAgent; print('Morpheo OK')"
+	@echo "$(GREEN)✅ Todos los agentes funcionan correctamente$(RESET)"

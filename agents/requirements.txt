@@ -1,0 +1,24 @@
+# TrustGraph Agents - Requisitos
+# Agentes Inteligentes para gestión del conocimiento
+
+# LangChain y LangGraph - Framework de agentes
+langchain>=0.1.0
+langchain-core>=0.1.0
+langgraph>=0.0.50
+
+# Utilidades
+dataclasses>=0.6; python_version<"3.7"
+typing-extensions>=4.0.0
+python-dateutil>=2.8.0
+
+# HTTP Client para APIs
+httpx>=0.25.0
+requests>=2.31.0
+
+# CLI
+click>=8.0.0
+rich>=13.0.0  # Para output formateado (opcional)
+
+# Opcional: Integración con LLMs
+# openai>=1.0.0
+# anthropic>=0.8.0

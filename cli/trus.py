@@ -3,16 +3,11 @@
 TrustGraph CLI - trus
 Interfaz de línea de comandos para TrustGraph
 
-Uso:
-    trus --help
-    trus login
-    trus status
-    trus recordar <archivo>
-    trus recordar --directorio <ruta>
-    trus recordar --proyecto
-    trus query "pregunta"
-    trus config provider zai
-    trus config apikey
+Estructura:
+  trus infra     - Gestión de infraestructura Docker
+  trus agentes   - Configuración de agentes y LLM
+  trus recordar  - Indexar contenido
+  trus query     - Consultar memoria
 """
 
 import os
@@ -21,8 +16,8 @@ import json
 import click
 import requests
 from pathlib import Path
-from typing import Optional, Dict, Any
-from dataclasses import dataclass, asdict
+from typing import Optional, Dict, Any, List
+from dataclasses import dataclass, asdict, field
 
 # Colores
 BLUE = '\033[36m'
@@ -36,6 +31,7 @@ RESET = '\033[0m'
 CONFIG_DIR = Path.home() / '.trustgraph'
 CONFIG_FILE = CONFIG_DIR / 'config.json'
 
+# Proveedores disponibles
 PROVIDERS = {
     'openai': {'name': 'OpenAI', 'model': 'gpt-4o', 'url': 'https://api.openai.com'},
     'anthropic': {'name': 'Anthropic', 'model': 'claude-3-5-sonnet', 'url': 'https://api.anthropic.com'},
@@ -45,18 +41,17 @@ PROVIDERS = {
     'ollama': {'name': 'Ollama (Local)', 'model': 'llama3.1', 'url': 'http://localhost:11434'},
 }
 
+# Agentes disponibles
+AGENTES = ['bibliotecario', 'investigador', 'nocturno']
+
 
 @dataclass
-class TrustGraphConfig:
-    """Configuración de TrustGraph CLI"""
-    host: str = 'localhost'
-    port: int = 8080
-    api_gateway: str = 'http://localhost:8080'
-    provider: str = 'openai'
+class AgentConfig:
+    """Configuración de un agente específico"""
+    proveedor: str = 'openai'
     api_key: str = ''
-    model: str = ''
-    is_local: bool = True
-    auth_token: str = ''
+    modelo: str = ''
+    activo: bool = True
 
     def to_dict(self):
         return asdict(self)
@@ -64,6 +59,41 @@ class TrustGraphConfig:
     @classmethod
     def from_dict(cls, data):
         return cls(**data)
+
+
+@dataclass
+class TrustGraphConfig:
+    """Configuración principal de TrustGraph"""
+    host: str = 'localhost'
+    port: int = 8080
+    api_gateway: str = 'http://localhost:8080'
+    is_local: bool = True
+    auth_token: str = ''
+
+    # Configuración global de LLM (para compartir)
+    global_provider: str = 'openai'
+    global_api_key: str = ''
+    global_model: str = ''
+
+    # Configuración por agente
+    agentes: Dict[str, Dict[str, Any]] = field(default_factory=dict)
+
+    def to_dict(self):
+        return asdict(self)
+
+    @classmethod
+    def from_dict(cls, data):
+        return cls(**data)
+
+    def get_agent_config(self, agente: str) -> AgentConfig:
+        """Obtiene configuración de un agente específico"""
+        if agente in self.agentes:
+            return AgentConfig.from_dict(self.agentes[agente])
+        return AgentConfig()
+
+    def set_agent_config(self, agente: str, config: AgentConfig):
+        """Guarda configuración de un agente"""
+        self.agentes[agente] = config.to_dict()
 
 
 def ensure_config_dir():
@@ -88,13 +118,10 @@ def save_config(config: TrustGraphConfig):
         json.dump(config.to_dict(), f, indent=2)
 
 
-def check_connection(config: TrustGraphConfig) -> bool:
+def check_connection(api_gateway: str) -> bool:
     """Verifica la conexión con TrustGraph"""
     try:
-        response = requests.get(
-            f"{config.api_gateway}/api/v1/health",
-            timeout=5
-        )
+        response = requests.get(f"{api_gateway}/api/v1/health", timeout=5)
         return response.status_code == 200
     except:
         return False
@@ -114,7 +141,7 @@ def print_header(title: str):
 # ═══════════════════════════════════════════════════════════════
 
 @click.group()
-@click.version_option(version='1.0.0', prog_name='trus')
+@click.version_option(version='2.0.0', prog_name='trus')
 @click.pass_context
 def cli(ctx):
     """
@@ -123,133 +150,415 @@ def cli(ctx):
     Comandos principales:
 
     \b
-      login      - Configura conexión local o remota
-      recordar   - Guarda e indexa archivos/directorios
-    \b
-      query      - Consulta la memoria con GraphRAG
-      status     - Verifica estado de TrustGraph
-    \b
-      config     - Configura proveedores LLM y opciones
-      servicios  - Gestiona servicios (start/stop/logs)
+      infra       - Gestión de infraestructura Docker
+      agentes     - Configuración de agentes y LLM
+      recordar    - Indexa archivos en TrustGraph
+      query       - Consulta la memoria
     """
     ctx.ensure_object(dict)
     ctx.obj['config'] = load_config()
 
 
 # ═══════════════════════════════════════════════════════════════
-# COMANDO: LOGIN
+# GRUPO: INFRAESTRUCTURA (Docker)
 # ═══════════════════════════════════════════════════════════════
 
-@cli.command()
-@click.option('--host', '-h', help='Host de TrustGraph (default: localhost)')
-@click.option('--port', '-p', default=8080, help='Puerto del API Gateway')
-@click.option('--remote', is_flag=True, help='Conexión remota')
+@cli.group()
+def infra():
+    """
+    🐳 Gestión de infraestructura Docker
+
+    Comandos:
+
+    \b
+      start     - Inicia los servicios Docker
+      stop      - Detiene los servicios
+      restart   - Reinicia los servicios
+      status    - Ver estado de servicios
+      logs      - Ver logs de servicios
+      setup     - Configura entorno Docker
+    """
+    pass
+
+
+@infra.command()
 @click.pass_context
-def login(ctx, host, port, remote):
-    """
-    🔐 Configura la conexión con TrustGraph
+def start(ctx):
+    """Inicia los servicios Docker de TrustGraph"""
+    print_header("🐳 Iniciando TrustGraph")
+    os.system('docker compose up -d')
+    click.echo(f"{GREEN}✅ Servicios iniciados{RESET}")
 
-    Pregunta interactivamente por la configuración si no se
-    proporcionan opciones.
-    """
-    print_header("🔐 TrustGraph Login")
 
+@infra.command()
+@click.pass_context
+def stop(ctx):
+    """Detiene los servicios Docker"""
+    print_header("🛑 Deteniendo TrustGraph")
+    os.system('docker compose down')
+    click.echo(f"{GREEN}✅ Servicios detenidos{RESET}")
+
+
+@infra.command()
+@click.pass_context
+def restart(ctx):
+    """Reinicia los servicios Docker"""
+    print_header("🔄 Reiniciando TrustGraph")
+    os.system('docker compose restart')
+    click.echo(f"{GREEN}✅ Servicios reiniciados{RESET}")
+
+
+@infra.command()
+@click.pass_context
+def status(ctx):
+    """Muestra el estado de los servicios Docker"""
+    print_header("📊 Estado de Servicios")
+    os.system('docker compose ps')
+
+
+@infra.command()
+@click.option('--seguir', '-f', is_flag=True, help='Seguir logs en tiempo real')
+@click.pass_context
+def logs(ctx, seguir):
+    """Muestra los logs de los servicios"""
+    if seguir:
+        os.system('docker compose logs -f')
+    else:
+        os.system('docker compose logs --tail=100')
+
+
+@infra.command()
+@click.pass_context
+def setup(ctx):
+    """Configura el entorno Docker (crea .env si no existe)"""
+    print_header("⚙️ Setup de Infraestructura")
+
+    env_file = Path('.env')
+    env_example = Path('.env.example')
+
+    if env_file.exists():
+        click.echo(f"{YELLOW}ℹ️  El archivo .env ya existe{RESET}")
+    elif env_example.exists():
+        click.echo(f"{CYAN}📄 Copiando .env.example → .env{RESET}")
+        import shutil
+        shutil.copy('.env.example', '.env')
+        click.echo(f"{GREEN}✅ Archivo .env creado{RESET}")
+        click.echo(f"{YELLOW}⚠️  Edita .env con tus configuraciones{RESET}")
+    else:
+        click.echo(f"{RED}❌ No se encontró .env.example{RESET}")
+
+
+@infra.command()
+@click.pass_context
+def health(ctx):
+    """Verifica la salud de los servicios"""
+    config = ctx.obj['config']
+    api_url = f"{config.api_gateway}/api/v1/health"
+
+    print_header("🏥 Health Check")
+
+    if check_connection(config.api_gateway):
+        try:
+            response = requests.get(api_url, timeout=5)
+            data = response.json()
+            click.echo(f"{GREEN}✅ API Gateway: OK{RESET}")
+            click.echo(f"   Versión: {data.get('version', 'N/A')}")
+            click.echo(f"   Estado: {data.get('status', 'N/A')}")
+        except Exception as e:
+            click.echo(f"{RED}❌ Error: {e}{RESET}")
+    else:
+        click.echo(f"{RED}❌ API Gateway no responde{RESET}")
+        click.echo(f"{YELLOW}   URL: {api_url}{RESET}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# GRUPO: AGENTES (Configuración LLM)
+# ═══════════════════════════════════════════════════════════════
+
+@cli.group()
+def agentes():
+    """
+    🤖 Configuración de agentes inteligentes
+
+    Comandos:
+
+    \b
+      config      - Configura proveedor y API key
+      config-global   - Configura LLM compartido por todos
+      config-agente   - Configura LLM de un agente específico
+      show        - Muestra configuración actual
+      status      - Muestra estado de los agentes
+    """
+    pass
+
+
+@agentes.command()
+@click.pass_context
+def show(ctx):
+    """Muestra la configuración de todos los agentes"""
     config = ctx.obj['config']
 
-    # Preguntar si es local o remoto
-    if remote:
-        config.is_local = False
-    else:
-        is_local = click.confirm(
-            f"{CYAN}¿Es una instalación local?{RESET}",
-            default=config.is_local
-        )
-        config.is_local = is_local
+    print_header("⚙️ Configuración de Agentes")
 
-    # Configurar host
-    if not host:
-        default_host = 'localhost' if config.is_local else config.host
-        host = click.prompt(
-            f"{CYAN}Host de TrustGraph{RESET}",
-            default=default_host
-        )
-    config.host = host
-    config.port = port
-    config.api_gateway = f"http://{host}:{port}"
+    # Configuración global
+    click.echo(f"{BOLD}📡 Configuración Global:{RESET}")
+    click.echo(f"   Proveedor: {CYAN}{config.global_provider}{RESET}")
+    click.echo(f"   Modelo: {CYAN}{config.global_model or 'Por defecto'}{RESET}")
+    click.echo(f"   API Key: {CYAN}{'*' * 8 if config.global_api_key else 'No configurada'}{RESET}")
 
-    # Si es remoto, preguntar por token de autenticación
-    if not config.is_local:
-        click.echo(f"\n{YELLOW}⚠️  Conexión remota detectada{RESET}")
-        token = click.prompt(
-            f"{CYAN}Token de autenticación (opcional){RESET}",
-            default=config.auth_token,
-            hide_input=True
-        )
-        config.auth_token = token
+    click.echo(f"\n{BOLD}📱 Configuración por Agente:{RESET}")
 
-    # Probar conexión
-    click.echo(f"\n{BLUE}🔄 Probando conexión con {config.api_gateway}...{RESET}")
+    for agente in AGENTES:
+        agent_cfg = config.get_agent_config(agente)
 
-    if check_connection(config):
-        click.echo(f"{GREEN}✅ Conexión exitosa!{RESET}")
-        save_config(config)
-        click.echo(f"\n{GREEN}💾 Configuración guardada en {CONFIG_FILE}{RESET}")
-    else:
-        click.echo(f"{YELLOW}⚠️  No se pudo conectar a {config.api_gateway}{RESET}")
-        click.echo(f"{YELLOW}   Verifica que TrustGraph esté ejecutándose{RESET}")
+        # Si no tiene config específica, usar la global
+        if not agent_cfg.api_key:
+            proveedor = agent_cfg.proveedor or config.global_provider
+            modelo = agent_cfg.modelo or config.global_model or PROVIDERS.get(proveedor, {}).get('model', '')
+            api_key = f"{'*' * 8} (global)"
+        else:
+            proveedor = agent_cfg.proveedor
+            modelo = agent_cfg.modelo or PROVIDERS.get(proveedor, {}).get('model', '')
+            api_key = f"{'*' * 8}"
 
-        if click.confirm(f"{CYAN}¿Guardar configuración de todos modos?{RESET}"):
-            save_config(config)
+        status_icon = f"{GREEN}✅" if agent_cfg.activo else f"{YELLOW}⏸️"
+
+        click.echo(f"\n   {status_icon} {agente.capitalize()}:")
+        click.echo(f"      Proveedor: {CYAN}{proveedor}{RESET}")
+        click.echo(f"      Modelo: {CYAN}{modelo}{RESET}")
+        click.echo(f"      API Key: {CYAN}{api_key}{RESET}")
+
+    click.echo(f"\n{BOLD}📁 Archivo de configuración:{RESET}")
+    click.echo(f"   {CONFIG_FILE}")
+
+
+@agentes.command()
+@click.pass_context
+def status(ctx):
+    """Muestra el estado de los agentes"""
+    config = ctx.obj['config']
+    api_ok = check_connection(config.api_gateway)
+
+    print_header("🤖 Estado de Agentes")
+
+    click.echo(f"{GREEN}✅" if api_ok else f"{RED}❌", end='')
+    click.echo(f" API Gateway: {config.api_gateway}")
+
+    for agente in AGENTES:
+        agent_cfg = config.get_agent_config(agente)
+
+        # Verificar si tiene API key (local o global)
+        has_key = bool(agent_cfg.api_key or config.global_api_key)
+
+        icon = f"{GREEN}✅" if has_key else f"{YELLOW}⚠️"
+        status = "Configurado" if has_key else "Sin API Key"
+
+        click.echo(f"{icon} {agente.capitalize()}: {status}")
+
+    click.echo(f"\n{CYAN}💡 Usa 'trus agentes config --help' para configurar{RESET}")
+
+
+@agentes.command()
+@click.option('--provider', '-p', help='Proveedor LLM')
+@click.option('--apikey', '-k', help='API Key')
+@click.option('--model', '-m', help='Modelo específico')
+@click.pass_context
+def config_global(ctx, provider, apikey, model):
+    """
+    Configura el LLM global compartido por todos los agentes
+
+    Ejemplos:
+
+    \b
+      trus agentes config-global --provider openai
+      trus agentes config-global -p zai -k TU_API_KEY
+    """
+    config = ctx.obj['config']
+
+    # Si no hay parámetros, modo interactivo
+    if not provider and not apikey and not model:
+        print_header("⚙️ Configuración Global de LLM")
+
+        # Seleccionar proveedor
+        click.echo(f"{CYAN}Selecciona proveedor:{RESET}")
+        for i, (key, info) in enumerate(PROVIDERS.items(), 1):
+            click.echo(f"   {i}. {key} - {info['name']}")
+
+        idx = click.prompt("\nOpción", type=int, default=1)
+        provider = list(PROVIDERS.keys())[idx - 1]
+
+        # Solicitar API key
+        if provider != 'ollama':
+            apikey = click.prompt(f"{CYAN}API Key para {PROVIDERS[provider]['name']}{RESET}",
+                                  hide_input=True)
+
+        # Modelo
+        default_model = PROVIDERS[provider]['model']
+        model = click.prompt(f"{CYAN}Modelo (default: {default_model}){RESET}",
+                            default=default_model)
+
+    # Aplicar configuración
+    if provider:
+        if provider not in PROVIDERS:
+            click.echo(f"{RED}❌ Proveedor no válido: {provider}{RESET}")
+            return
+        config.global_provider = provider
+        click.echo(f"{GREEN}✅ Proveedor: {provider}{RESET}")
+
+    if apikey:
+        config.global_api_key = apikey
+        click.echo(f"{GREEN}✅ API Key configurada{RESET}")
+
+    if model:
+        config.global_model = model
+        click.echo(f"{GREEN}✅ Modelo: {model}{RESET}")
+
+    save_config(config)
+    click.echo(f"\n{GREEN}✅ Configuración global guardada{RESET}")
+
+
+@agentes.command()
+@click.argument('agente', type=click.Choice(AGENTES))
+@click.option('--provider', '-p', help='Proveedor LLM')
+@click.option('--apikey', '-k', help='API Key específica del agente')
+@click.option('--model', '-m', help='Modelo específico')
+@click.option('--activo/--inactivo', default=True, help='Activar/desactivar agente')
+@click.pass_context
+def config_agente(ctx, agente, provider, apikey, model, activo):
+    """
+    Configura un agente específico con su propio LLM
+
+    Si no especifica provider/apikey, usará la configuración global.
+
+    Ejemplos:
+
+    \b
+      trus agentes config-agente bibliotecario --provider zai
+      trus agentes config-agente bibliotecario -k API_KEY_PROPIA
+      trus agentes config-agente investigador --inactivo
+    """
+    config = ctx.obj['config']
+    agent_cfg = config.get_agent_config(agente)
+
+    # Modo interactivo si no hay parámetros
+    if not provider and not apikey and not model and activo:
+        print_header(f"⚙️ Configurar Agente: {agente.capitalize()}")
+
+        # Mostrar configuración actual
+        current_provider = agent_cfg.proveedor or config.global_provider
+        current_model = agent_cfg.modelo or config.global_model or PROVIDERS.get(current_provider, {}).get('model', '')
+        has_own_key = bool(agent_cfg.api_key)
+
+        click.echo(f"{CYAN}Proveedor actual: {current_provider}{RESET}")
+        click.echo(f"{CYAN}Modelo actual: {current_model}{RESET}")
+        click.echo(f"{CYAN}API Key propia: {'Sí' if has_own_key else 'No (usa global)'}{RESET}\n")
+
+        # Preguntar qué cambiar
+        if click.confirm(f"{CYAN}¿Cambiar proveedor?{RESET}"):
+            click.echo(f"\n{GREEN}Proveedores disponibles:{RESET}")
+            for key, info in PROVIDERS.items():
+                click.echo(f"  {key}: {info['name']}")
+
+            provider = click.prompt(f"{CYAN}Nuevo proveedor{RESET}", type=str)
+
+        if click.confirm(f"{CYAN}¿Agregar API Key propia?{RESET}"):
+            if provider != 'ollama':
+                apikey = click.prompt(f"{CYAN}API Key para {agente}{RESET}", hide_input=True)
+            else:
+                click.echo(f"{YELLOW}ℹ️  Ollama no requiere API key{RESET}")
+
+        if click.confirm(f"{CYAN}¿Cambiar modelo?{RESET}"):
+            default = PROVIDERS.get(provider or current_provider, {}).get('model', '')
+            model = click.prompt(f"{CYAN}Modelo{RESET}", default=default)
+
+    # Aplicar cambios
+    if provider:
+        if provider not in PROVIDERS:
+            click.echo(f"{RED}❌ Proveedor no válido: {provider}{RESET}")
+            return
+        agent_cfg.proveedor = provider
+
+    if apikey:
+        agent_cfg.api_key = apikey
+
+    if model:
+        agent_cfg.modelo = model
+
+    agent_cfg.activo = activo
+
+    # Guardar
+    config.set_agent_config(agente, agent_cfg)
+    save_config(config)
+
+    # Resumen
+    click.echo(f"\n{GREEN}✅ Configuración de {agente.capitalize()} guardada:{RESET}")
+    click.echo(f"   Proveedor: {agent_cfg.proveedor or '(global)'}")
+    click.echo(f"   Modelo: {agent_cfg.modelo or '(global)'}")
+    click.echo(f"   API Key: {'Propia' if agent_cfg.api_key else '(global)'}")
+    click.echo(f"   Estado: {'Activo' if agent_cfg.activo else 'Inactivo'}")
+
+
+@agentes.command()
+@click.option('--provider', '-p', help='Proveedor LLM')
+@click.option('--apikey', '-k', help='API Key')
+@click.option('--model', '-m', help='Modelo')
+@click.pass_context
+def config(ctx, provider, apikey, model):
+    """
+    Configura la API key global (atajo para config-global)
+
+    Ejemplo: trus agentes config -p openai -k TU_API_KEY
+    """
+    # Delegar a config-global
+    ctx.invoke(config_global, provider=provider, apikey=apikey, model=model)
+
+
+# Alias para compatibilidad
+@agentes.command(name='configurar')
+@click.pass_context
+def configurar(ctx):
+    """Alias de 'config' para compatibilidad"""
+    ctx.invoke(config_global)
 
 
 # ═══════════════════════════════════════════════════════════════
-# COMANDO: RECORDAR (Guardar/Indexar)
+# COMANDOS: RECORDAR (Indexar)
 # ═══════════════════════════════════════════════════════════════
 
 @cli.group()
 def recordar():
     """
-    💾 Guarda e indexa información en TrustGraph
+    💾 Indexa contenido en TrustGraph
 
-    Subcomandos:
+    Comandos:
 
     \b
-      archivo     - Indexa un archivo específico
-      directorio  - Indexa todos los archivos de un directorio
-      proyecto    - Indexa el proyecto actual completo
+      archivo     - Indexa un archivo
+      directorio  - Indexa un directorio
+      proyecto    - Indexa el proyecto actual
     """
     pass
 
 
 @recordar.command()
 @click.argument('ruta', type=click.Path(exists=True))
-@click.option('--categoria', '-c', default='documentacion', help='Categoría del documento')
-@click.option('--etiquetas', '-t', help='Etiquetas separadas por coma')
+@click.option('--categoria', '-c', default='documentacion')
+@click.option('--etiquetas', '-t')
 @click.pass_context
 def archivo(ctx, ruta, categoria, etiquetas):
     """Indexa un archivo específico"""
     config = ctx.obj['config']
 
-    print_header(f"💾 Indexando: {Path(ruta).name}")
-
-    # Verificar conexión
-    if not check_connection(config):
+    if not check_connection(config.api_gateway):
         click.echo(f"{RED}❌ No hay conexión con TrustGraph{RESET}")
-        click.echo(f"{YELLOW}   Ejecuta: trus login{RESET}")
         return
 
-    # Leer archivo
+    print_header(f"💾 Indexando: {Path(ruta).name}")
+
     try:
         with open(ruta, 'r', encoding='utf-8') as f:
             contenido = f.read()
-    except Exception as e:
-        click.echo(f"{RED}❌ Error leyendo archivo: {e}{RESET}")
-        return
 
-    # Enviar a TrustGraph
-    click.echo(f"{BLUE}📤 Enviando a TrustGraph...{RESET}")
-
-    try:
         response = requests.post(
             f"{config.api_gateway}/api/v1/documents/upload",
             json={
@@ -262,54 +571,39 @@ def archivo(ctx, ruta, categoria, etiquetas):
         )
 
         if response.status_code == 200:
-            click.echo(f"{GREEN}✅ Archivo indexado correctamente{RESET}")
             data = response.json()
-            click.echo(f"{CYAN}   Entidades extraídas: {data.get('entities', 0)}{RESET}")
-            click.echo(f"{CYAN}   Relaciones: {data.get('relations', 0)}{RESET}")
+            click.echo(f"{GREEN}✅ Indexado correctamente{RESET}")
+            click.echo(f"   Entidades: {data.get('entities', 0)}")
+            click.echo(f"   Relaciones: {data.get('relations', 0)}")
         else:
             click.echo(f"{RED}❌ Error: {response.status_code}{RESET}")
-            click.echo(f"{RED}   {response.text}{RESET}")
 
     except Exception as e:
-        click.echo(f"{RED}❌ Error de conexión: {e}{RESET}")
+        click.echo(f"{RED}❌ Error: {e}{RESET}")
 
 
 @recordar.command()
 @click.argument('ruta', type=click.Path(exists=True, file_okay=False))
-@click.option('--extensiones', '-e', default='.md,.txt,.py,.js,.ts', help='Extensiones a indexar')
-@click.option('--excluir', '-x', help='Patrones a excluir (separados por coma)')
-@click.option('--recursive', '-r', is_flag=True, default=True, help='Incluir subdirectorios')
+@click.option('--extensiones', '-e', default='.md,.txt,.py,.js,.ts')
 @click.pass_context
-def directorio(ctx, ruta, extensiones, excluir, recursive):
+def directorio(ctx, ruta, extensiones):
     """Indexa todos los archivos de un directorio"""
     config = ctx.obj['config']
 
-    print_header(f"📁 Indexando directorio: {ruta}")
-
-    if not check_connection(config):
+    if not check_connection(config.api_gateway):
         click.echo(f"{RED}❌ No hay conexión con TrustGraph{RESET}")
         return
 
-    ext_list = extensiones.split(',')
-    exclude_patterns = excluir.split(',') if excluir else ['node_modules', '.git', '__pycache__']
+    print_header(f"📁 Indexando: {ruta}")
 
-    # Encontrar archivos
     archivos = []
-    base_path = Path(ruta)
+    for ext in extensiones.split(','):
+        archivos.extend(Path(ruta).rglob(f'*{ext}'))
 
-    if recursive:
-        for ext in ext_list:
-            archivos.extend(base_path.rglob(f'*{ext}'))
-    else:
-        for ext in ext_list:
-            archivos.extend(base_path.glob(f'*{ext}'))
+    archivos = [a for a in archivos if 'node_modules' not in str(a)]
 
-    # Filtrar excluidos
-    archivos = [a for a in archivos if not any(p in str(a) for p in exclude_patterns)]
+    click.echo(f"{CYAN}Encontrados {len(archivos)} archivos{RESET}\n")
 
-    click.echo(f"{CYAN}📊 Encontrados {len(archivos)} archivos{RESET}\n")
-
-    # Indexar cada archivo
     exitosos = 0
     for i, arch in enumerate(archivos, 1):
         click.echo(f"[{i}/{len(archivos)}] {arch.name}...", nl=False)
@@ -319,7 +613,7 @@ def directorio(ctx, ruta, extensiones, excluir, recursive):
 
             response = requests.post(
                 f"{config.api_gateway}/api/v1/documents/upload",
-                json={'path': str(arch), 'content': contenido, 'category': 'documentacion'},
+                json={'path': str(arch), 'content': contenido},
                 timeout=60
             )
 
@@ -331,354 +625,119 @@ def directorio(ctx, ruta, extensiones, excluir, recursive):
         except:
             click.echo(f" {RED}✗{RESET}")
 
-    click.echo(f"\n{GREEN}✅ Indexación completada: {exitosos}/{len(archivos)} exitosos{RESET}")
+    click.echo(f"\n{GREEN}✅ Completado: {exitosos}/{len(archivos)}{RESET}")
 
 
 @recordar.command()
 @click.pass_context
 def proyecto(ctx):
-    """Indexa el proyecto actual completo"""
-    directorio(ctx, ruta='.', extensiones='.md,.txt,.py,.js,.ts,.json,.yaml,.yml')
+    """Indexa el proyecto actual"""
+    ctx.invoke(directorio, ruta='.', extensiones='.md,.txt,.py,.js,.ts,.json,.yaml')
 
 
 # ═══════════════════════════════════════════════════════════════
-# COMANDO: QUERY (Consultar)
+# COMANDO: QUERY
 # ═══════════════════════════════════════════════════════════════
 
 @cli.command()
 @click.argument('pregunta', required=False)
-@click.option('--interactivo', '-i', is_flag=True, help='Modo interactivo')
-@click.option('--fuentes', '-s', is_flag=True, help='Mostrar fuentes')
+@click.option('--interactivo', '-i', is_flag=True)
 @click.pass_context
-def query(ctx, pregunta, interactivo, fuentes):
-    """
-    🔍 Consulta la memoria con GraphRAG
-
-    Ejemplos:
-
-        trus query "¿Qué es TrustGraph?"
-
-        trus query -i              # Modo interactivo
-
-        trus query "arquitectura" --fuentes
-    """
+def query(ctx, pregunta, interactivo):
+    """Consulta la memoria de TrustGraph"""
     config = ctx.obj['config']
 
-    if not check_connection(config):
+    if not check_connection(config.api_gateway):
         click.echo(f"{RED}❌ No hay conexión con TrustGraph{RESET}")
-        click.echo(f"{YELLOW}   Ejecuta: trus login{RESET}")
         return
 
     if interactivo or not pregunta:
-        # Modo interactivo
-        print_header("🔍 TrustGraph Query - Modo Interactivo")
-        click.echo(f"{CYAN}Escribe 'salir' o 'quit' para terminar{RESET}\n")
+        print_header("🔍 Modo Interactivo")
+        click.echo(f"{CYAN}Escribe 'salir' para terminar{RESET}\n")
 
         while True:
             pregunta = click.prompt(f"{BLUE}❓ Pregunta{RESET}")
-
-            if pregunta.lower() in ['salir', 'quit', 'exit', 'q']:
+            if pregunta.lower() in ['salir', 'quit', 'exit']:
                 break
-
-            _ejecutar_query(config, pregunta, fuentes)
-            click.echo("")
+            _ejecutar_query(config, pregunta)
     else:
-        print_header("🔍 TrustGraph Query")
-        _ejecutar_query(config, pregunta, fuentes)
+        _ejecutar_query(config, pregunta)
 
 
-def _ejecutar_query(config: TrustGraphConfig, pregunta: str, fuentes: bool):
-    """Ejecuta una consulta GraphRAG"""
+def _ejecutar_query(config: TrustGraphConfig, pregunta: str):
+    """Ejecuta una consulta"""
     click.echo(f"{BLUE}🤔 Pensando...{RESET}\n")
 
     try:
         response = requests.post(
             f"{config.api_gateway}/api/v1/graphrag/query",
-            json={
-                'query': pregunta,
-                'context_core': 'documentation',
-                'include_sources': fuentes,
-            },
+            json={'query': pregunta, 'context_core': 'documentation'},
             timeout=120
         )
 
         if response.status_code == 200:
             data = response.json()
-            respuesta = data.get('response', 'Sin respuesta')
-
             click.echo(f"{GREEN}📝 Respuesta:{RESET}\n")
-            click.echo(respuesta)
-
-            if fuentes and 'sources' in data:
-                click.echo(f"\n{CYAN}📚 Fuentes:{RESET}")
-                for src in data['sources'][:5]:
-                    click.echo(f"   • {src}")
+            click.echo(data.get('response', 'Sin respuesta'))
         else:
             click.echo(f"{RED}❌ Error: {response.status_code}{RESET}")
-            click.echo(f"{RED}   {response.text}{RESET}")
 
     except Exception as e:
         click.echo(f"{RED}❌ Error: {e}{RESET}")
 
 
 # ═══════════════════════════════════════════════════════════════
-# COMANDO: STATUS
+# COMANDO: LOGIN (legacy)
+# ═══════════════════════════════════════════════════════════════
+
+@cli.command()
+@click.option('--host', '-h', default='localhost')
+@click.option('--port', '-p', default=8080)
+@click.pass_context
+def login(ctx, host, port):
+    """Configura la conexión con TrustGraph"""
+    config = ctx.obj['config']
+
+    config.host = host
+    config.port = port
+    config.api_gateway = f"http://{host}:{port}"
+
+    save_config(config)
+
+    click.echo(f"{GREEN}✅ Configuración guardada:{RESET}")
+    click.echo(f"   Host: {host}")
+    click.echo(f"   Puerto: {port}")
+    click.echo(f"   API: {config.api_gateway}")
+
+
+# ═══════════════════════════════════════════════════════════════
+# COMANDO: STATUS (legacy)
 # ═══════════════════════════════════════════════════════════════
 
 @cli.command()
 @click.pass_context
 def status(ctx):
-    """
-    📊 Muestra el estado de TrustGraph y la configuración
-    """
+    """Muestra el estado general de TrustGraph"""
     config = ctx.obj['config']
 
-    print_header("📊 TrustGraph Status")
+    print_header("📊 Estado de TrustGraph")
 
-    # Configuración
-    click.echo(f"{BOLD}⚙️  Configuración:{RESET}")
-    click.echo(f"   Host: {config.host}")
-    click.echo(f"   Puerto: {config.port}")
-    click.echo(f"   API Gateway: {config.api_gateway}")
-    click.echo(f"   Tipo: {'Local' if config.is_local else 'Remoto'}")
-    click.echo(f"   Proveedor LLM: {PROVIDERS.get(config.provider, {}).get('name', config.provider)}")
-    click.echo("")
+    click.echo(f"{BOLD}Conexión:{RESET}")
+    click.echo(f"   API: {config.api_gateway}")
 
-    # Conexión
-    click.echo(f"{BOLD}🔌 Conectividad:{RESET}")
-    if check_connection(config):
-        click.echo(f"   {GREEN}✅ TrustGraph está activo{RESET}")
-
+    if check_connection(config.api_gateway):
+        click.echo(f"   {GREEN}✅ Conectado{RESET}")
         try:
-            response = requests.get(f"{config.api_gateway}/api/v1/health")
-            data = response.json()
+            r = requests.get(f"{config.api_gateway}/api/v1/health", timeout=5)
+            data = r.json()
             click.echo(f"   Versión: {data.get('version', 'N/A')}")
-            click.echo(f"   Estado: {data.get('status', 'N/A')}")
         except:
             pass
     else:
-        click.echo(f"   {RED}❌ TrustGraph no responde{RESET}")
-        click.echo(f"   {YELLOW}   Verifica que esté ejecutándose:{RESET}")
-        if config.is_local:
-            click.echo(f"   {YELLOW}   make up{RESET}")
+        click.echo(f"   {RED}❌ Desconectado{RESET}")
 
-    click.echo("")
-
-
-# ═══════════════════════════════════════════════════════════════
-# COMANDO: CONFIG
-# ═══════════════════════════════════════════════════════════════
-
-@cli.group()
-def config():
-    """
-    ⚙️  Configura TrustGraph y proveedores LLM
-
-    Subcomandos:
-
-    \b
-      provider   - Cambia el proveedor de LLM
-      apikey     - Configura la API key
-      model      - Cambia el modelo
-      show       - Muestra configuración actual
-    """
-    pass
-
-
-@config.command()
-@click.pass_context
-def show(ctx):
-    """Muestra la configuración actual"""
-    config = ctx.obj['config']
-
-    print_header("⚙️  Configuración Actual")
-
-    click.echo(f"{BOLD}Conexión:{RESET}")
-    click.echo(f"  Host: {CYAN}{config.host}{RESET}")
-    click.echo(f"  Puerto: {CYAN}{config.port}{RESET}")
-    click.echo(f"  API Gateway: {CYAN}{config.api_gateway}{RESET}")
-    click.echo(f"  Local: {CYAN}{config.is_local}{RESET}")
-
-    click.echo(f"\n{BOLD}Proveedor LLM:{RESET}")
-    click.echo(f"  Proveedor: {CYAN}{config.provider}{RESET}")
-    click.echo(f"  Modelo: {CYAN}{config.model or 'Por defecto'}{RESET}")
-    click.echo(f"  API Key: {CYAN}{'*' * 8 if config.api_key else 'No configurada'}{RESET}")
-
-    click.echo(f"\n{BOLD}Archivo:{RESET}")
-    click.echo(f"  {CONFIG_FILE}")
-
-
-@config.command()
-@click.argument('nombre', required=False)
-@click.pass_context
-def provider(ctx, nombre):
-    """
-    Cambia el proveedor de LLM
-
-    Proveedores: openai, anthropic, zai, kimi, minimax, ollama
-    """
-    config = ctx.obj['config']
-
-    if not nombre:
-        # Mostrar menú
-        print_header("🤖 Selecciona Proveedor LLM")
-
-        for key, info in PROVIDERS.items():
-            marker = "👉" if key == config.provider else "  "
-            click.echo(f"{marker} {GREEN}{key:12}{RESET} - {info['name']}")
-            click.echo(f"      {info['description']}")
-
-        nombre = click.prompt(f"\n{CYAN}Proveedor{RESET}", type=str)
-
-    if nombre not in PROVIDERS:
-        click.echo(f"{RED}❌ Proveedor '{nombre}' no soportado{RESET}")
-        click.echo(f"{YELLOW}   Opciones: {', '.join(PROVIDERS.keys())}{RESET}")
-        return
-
-    config.provider = nombre
-    config.model = PROVIDERS[nombre]['model']
-    save_config(config)
-
-    click.echo(f"{GREEN}✅ Proveedor cambiado a: {PROVIDERS[nombre]['name']}{RESET}")
-    click.echo(f"{CYAN}   Modelo: {config.model}{RESET}")
-
-    # Si es local, también actualizar .env
-    if config.is_local:
-        click.echo(f"\n{YELLOW}⚠️  Para aplicar cambios en el servidor local:{RESET}")
-        click.echo(f"   make provider USE={nombre}")
-        click.echo(f"   docker compose restart")
-
-
-@config.command()
-@click.pass_context
-def apikey(ctx):
-    """Configura la API key del proveedor actual"""
-    config = ctx.obj['config']
-
-    provider_info = PROVIDERS.get(config.provider, {})
-    provider_name = provider_info.get('name', config.provider)
-
-    print_header(f"🔑 API Key - {provider_name}")
-
-    if config.provider == 'ollama':
-        click.echo(f"{YELLOW}ℹ️  Ollama no requiere API key{RESET}")
-        return
-
-    click.echo(f"{CYAN}Obtén tu API key en:{RESET} {provider_info.get('url', 'N/A')}\n")
-
-    api_key = click.prompt(
-        f"{CYAN}API Key para {provider_name}{RESET}",
-        hide_input=True
-    )
-
-    if api_key:
-        config.api_key = api_key
-        save_config(config)
-        click.echo(f"{GREEN}✅ API key guardada{RESET}")
-
-        if config.is_local:
-            click.echo(f"\n{YELLOW}⚠️  También actualiza el archivo .env del servidor{RESET}")
-
-
-@config.command()
-@click.argument('nombre', required=False)
-@click.pass_context
-def model(ctx, nombre):
-    """Cambia el modelo del proveedor actual"""
-    config = ctx.obj['config']
-
-    provider_info = PROVIDERS.get(config.provider, {})
-    default_model = config.model or provider_info.get('model', '')
-
-    if not nombre:
-        nombre = click.prompt(
-            f"{CYAN}Modelo{RESET}",
-            default=default_model
-        )
-
-    config.model = nombre
-    save_config(config)
-
-    click.echo(f"{GREEN}✅ Modelo cambiado a: {nombre}{RESET}")
-
-
-# ═══════════════════════════════════════════════════════════════
-# COMANDO: SERVICIOS (Gestión de servicios locales)
-# ═══════════════════════════════════════════════════════════════
-
-@cli.group()
-def servicios():
-    """
-    🚀 Gestiona los servicios TrustGraph (solo local)
-
-    Subcomandos:
-
-    \b
-      start    - Inicia TrustGraph
-      stop     - Detiene TrustGraph
-      restart  - Reinicia TrustGraph
-      logs     - Muestra logs
-    """
-    pass
-
-
-@servicios.command()
-@click.pass_context
-def start(ctx):
-    """Inicia TrustGraph"""
-    config = ctx.obj['config']
-
-    if not config.is_local:
-        click.echo(f"{RED}❌ Este comando solo funciona en modo local{RESET}")
-        return
-
-    print_header("🚀 Iniciando TrustGraph")
-    os.system('docker compose up -d')
-
-
-@servicios.command()
-@click.pass_context
-def stop(ctx):
-    """Detiene TrustGraph"""
-    config = ctx.obj['config']
-
-    if not config.is_local:
-        click.echo(f"{RED}❌ Este comando solo funciona en modo local{RESET}")
-        return
-
-    print_header("🛑 Deteniendo TrustGraph")
-    os.system('docker compose down')
-
-
-@servicios.command()
-@click.pass_context
-def restart(ctx):
-    """Reinicia TrustGraph"""
-    config = ctx.obj['config']
-
-    if not config.is_local:
-        click.echo(f"{RED}❌ Este comando solo funciona en modo local{RESET}")
-        return
-
-    print_header("🔄 Reiniciando TrustGraph")
-    os.system('docker compose restart')
-
-
-@servicios.command()
-@click.option('--seguir', '-f', is_flag=True, help='Seguir logs en tiempo real')
-@click.pass_context
-def logs(ctx, seguir):
-    """Muestra los logs de TrustGraph"""
-    config = ctx.obj['config']
-
-    if not config.is_local:
-        click.echo(f"{RED}❌ Este comando solo funciona en modo local{RESET}")
-        return
-
-    if seguir:
-        os.system('docker compose logs -f')
-    else:
-        os.system('docker compose logs --tail=100')
+    click.echo(f"\n{BOLD}Agentes:{RESET}")
+    ctx.invoke(agentes.status)
 
 
 # ═══════════════════════════════════════════════════════════════
