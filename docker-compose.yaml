@@ -50,20 +50,6 @@ services:
       retries: 5
       start_period: 120s
 
-  # Init TrustGraph - Inicializa namespaces y topics
-  init-trustgraph:
-    image: trustgraph/trustgraph-flow:1.6.0
-    container_name: tg-init
-    command: sh -c "sleep 10 && tg-init-trustgraph"
-    depends_on:
-      pulsar:
-        condition: service_healthy
-      api-gateway:
-        condition: service_started
-    networks:
-      - trustgraph-network
-    restart: "no"
-
   # Apache Cassandra - Graph Database
   cassandra:
     image: cassandra:4.1.4
@@ -114,6 +100,20 @@ services:
   # SERVICIOS TRUSTGRAPH
   # ============================================================================
 
+  # Init TrustGraph - Inicializa namespaces y topics
+  init-trustgraph:
+    image: trustgraph/trustgraph-flow:1.6.0
+    container_name: tg-init
+    command: sh -c "sleep 15 && tg-init-trustgraph -p http://pulsar:8080"
+    depends_on:
+      pulsar:
+        condition: service_healthy
+      api-gateway:
+        condition: service_started
+    networks:
+      - trustgraph-network
+    restart: "no"
+
   # API Gateway - Entry point for REST API
   api-gateway:
     image: trustgraph/trustgraph-flow:1.6.0
@@ -141,7 +141,7 @@ services:
       - KIMI_BASE_URL=${KIMI_BASE_URL:-https://api.kimi.com/coding}
       - KIMI_MODEL=${KIMI_MODEL:-kimi-k2}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
-      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.io/anthropic}
+      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.io/v1}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-MiniMax-M2.5}
       # Ollama
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
@@ -178,7 +178,7 @@ services:
       - KIMI_BASE_URL=${KIMI_BASE_URL:-https://api.kimi.com/coding}
       - KIMI_MODEL=${KIMI_MODEL:-kimi-k2}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
-      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.io/anthropic}
+      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.io/v1}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-MiniMax-M2.5}
       # Ollama
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
@@ -222,7 +222,6 @@ services:
     restart: unless-stopped
 
   # LLM Gateway - Routing entre proveedores (opcional, para configuración avanzada)
-  # Este servicio puede usarse para centralizar la lógica de proveedores
   llm-gateway:
     image: trustgraph/trustgraph-flow:1.6.0
     container_name: tg-llm-gateway
@@ -246,7 +245,7 @@ services:
       - KIMI_BASE_URL=${KIMI_BASE_URL:-https://api.kimi.com/coding}
       - KIMI_MODEL=${KIMI_MODEL:-kimi-k2}
       - MINIMAX_API_KEY=${MINIMAX_API_KEY:-}
-      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.io/anthropic}
+      - MINIMAX_BASE_URL=${MINIMAX_BASE_URL:-https://api.minimax.io/v1}
       - MINIMAX_MODEL=${MINIMAX_MODEL:-MiniMax-M2.5}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
