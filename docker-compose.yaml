@@ -29,7 +29,7 @@ services:
 
   # Apache Pulsar - Event Backbone
   pulsar:
-    image: apachepulsar/pulsar:3.2.0
+    image: apachepulsar/pulsar:2.11.0
     container_name: tg-pulsar
     command: bin/pulsar standalone
     ports:
@@ -38,16 +38,31 @@ services:
     volumes:
       - pulsar-data:/pulsar/data
     environment:
-      - PULSAR_MEM=-Xms512m -Xmx512m
+      - PULSAR_STANDALONE_USE_ZOOKEEPER=true
+      - PULSAR_MEM=-Xms512m -Xmx512m -XX:MaxDirectMemorySize=256m
+    networks:
+      - trustgraph-network
+    restart: unless-stopped
     healthcheck:
       test: ["CMD", "bin/pulsar-admin", "brokers", "healthcheck"]
       interval: 30s
       timeout: 10s
       retries: 5
       start_period: 120s
+
+  # Init TrustGraph - Inicializa namespaces y topics
+  init-trustgraph:
+    image: trustgraph/trustgraph-flow:1.6.0
+    container_name: tg-init
+    command: sh -c "sleep 10 && tg-init-trustgraph"
+    depends_on:
+      pulsar:
+        condition: service_healthy
+      api-gateway:
+        condition: service_started
     networks:
       - trustgraph-network
-    restart: unless-stopped
+    restart: "no"
 
   # Apache Cassandra - Graph Database
   cassandra:
@@ -101,7 +116,7 @@ services:
 
   # API Gateway - Entry point for REST API
   api-gateway:
-    image: trustgraph/trustgraph-flow:1.8.19
+    image: trustgraph/trustgraph-flow:1.6.0
     container_name: tg-api-gateway
     command: api-gateway --pulsar-host pulsar://pulsar:6650 --port 8080
     ports:
@@ -133,14 +148,14 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
     depends_on:
       pulsar:
-        condition: service_healthy
+        condition: service_started
     networks:
       - trustgraph-network
     restart: unless-stopped
 
   # Graph RAG Service
   graph-rag:
-    image: trustgraph/trustgraph-flow:1.8.19
+    image: trustgraph/trustgraph-flow:1.6.0
     container_name: tg-graph-rag
     command: graph-rag --pulsar-host pulsar://pulsar:6650
     environment:
@@ -170,7 +185,7 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
     depends_on:
       pulsar:
-        condition: service_healthy
+        condition: service_started
       cassandra:
         condition: service_healthy
     networks:
@@ -179,7 +194,7 @@ services:
 
   # Document Embeddings
   doc-embeddings:
-    image: trustgraph/trustgraph-flow:1.8.19
+    image: trustgraph/trustgraph-flow:1.6.0
     container_name: tg-doc-embeddings
     command: document-embeddings --pulsar-host pulsar://pulsar:6650
     environment:
@@ -195,9 +210,11 @@ services:
       - ZAI_BASE_URL=${ZAI_BASE_URL:-https://api.z.ai/api/paas/v4}
       # Ollama
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      # Google AI Studio (for embeddings)
+      - GOOGLE_API_KEY=${GOOGLE_API_KEY:-}
     depends_on:
       pulsar:
-        condition: service_healthy
+        condition: service_started
       qdrant:
         condition: service_healthy
     networks:
@@ -207,7 +224,7 @@ services:
   # LLM Gateway - Routing entre proveedores (opcional, para configuración avanzada)
   # Este servicio puede usarse para centralizar la lógica de proveedores
   llm-gateway:
-    image: trustgraph/trustgraph-flow:1.8.19
+    image: trustgraph/trustgraph-flow:1.6.0
     container_name: tg-llm-gateway
     command: llm-gateway --pulsar-host pulsar://pulsar:6650
     environment:
@@ -235,7 +252,7 @@ services:
       - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
     depends_on:
       pulsar:
-        condition: service_healthy
+        condition: service_started
     networks:
       - trustgraph-network
     restart: unless-stopped

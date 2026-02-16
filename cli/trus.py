@@ -121,8 +121,8 @@ def save_config(config: TrustGraphConfig):
 def check_connection(api_gateway: str) -> bool:
     """Verifica la conexión con TrustGraph"""
     try:
-        response = requests.get(f"{api_gateway}/api/v1/health", timeout=5)
-        return response.status_code == 200
+        response = requests.post(f"{api_gateway}/api/v1/health", timeout=5)
+        return response.status_code in [200, 405]
     except:
         return False
 
@@ -341,7 +341,7 @@ def status(ctx):
 
     print_header("🤖 Estado de Agentes")
 
-    click.echo(f"{GREEN}✅" if api_ok else f"{RED}❌", end='')
+    click.echo(f"{GREEN}✅" if api_ok else f"{RED}❌", nl=False)
     click.echo(f" API Gateway: {config.api_gateway}")
 
     for agente in AGENTES:
@@ -679,9 +679,27 @@ def _ejecutar_query(config: TrustGraphConfig, pregunta: str):
             data = response.json()
             click.echo(f"{GREEN}📝 Respuesta:{RESET}\n")
             click.echo(data.get('response', 'Sin respuesta'))
+        elif response.status_code == 404:
+            click.echo(f"{RED}❌ Error 404: Endpoint no encontrado{RESET}")
+            click.echo(f"{YELLOW}   Verifica que TrustGraph esté correctamente instalado{RESET}")
+            click.echo(f"{YELLOW}   Intenta: docker compose logs -f api-gateway{RESET}")
+        elif response.status_code >= 500:
+            click.echo(f"{RED}❌ Error {response.status_code}: Error del servidor{RESET}")
+            click.echo(f"{YELLOW}   Revisa los logs: docker compose logs api-gateway{RESET}")
         else:
             click.echo(f"{RED}❌ Error: {response.status_code}{RESET}")
+            try:
+                error_data = response.json()
+                click.echo(f"   {error_data.get('error', response.text[:100])}")
+            except:
+                click.echo(f"   {response.text[:100]}")
 
+    except requests.exceptions.ConnectionError:
+        click.echo(f"{RED}❌ Error de conexión{RESET}")
+        click.echo(f"{YELLOW}   No se pudo conectar a {config.api_gateway}{RESET}")
+        click.echo(f"{YELLOW}   Verifica que TrustGraph esté corriendo: trus infra status{RESET}")
+    except requests.exceptions.Timeout:
+        click.echo(f"{RED}❌ Timeout: La consulta tardó demasiado{RESET}")
     except Exception as e:
         click.echo(f"{RED}❌ Error: {e}{RESET}")
 
@@ -737,7 +755,13 @@ def status(ctx):
         click.echo(f"   {RED}❌ Desconectado{RESET}")
 
     click.echo(f"\n{BOLD}Agentes:{RESET}")
-    ctx.invoke(agentes.status)
+    # Mostrar estado de agentes directamente
+    for agente in AGENTES:
+        agent_cfg = config.get_agent_config(agente)
+        has_key = bool(agent_cfg.api_key or config.global_api_key)
+        icon = f"{GREEN}✅" if has_key else f"{YELLOW}⚠️"
+        status = "Configurado" if has_key else "Sin API Key"
+        click.echo(f"{icon} {agente.capitalize()}: {status}")
 
 
 # ═══════════════════════════════════════════════════════════════

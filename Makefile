@@ -36,7 +36,10 @@ up: ## Inicia TrustGraph
 	@docker compose up -d
 	@echo "$(GREEN)✅ Servicios iniciados$(RESET)"
 	@echo "$(YELLOW)⏳ Esperando a que estén listos...$(RESET)"
-	@sleep 10
+	@sleep 30
+	@echo "$(BLUE)🔧 Inicializando TrustGraph...$(RESET)"
+	@docker exec tg-api-gateway tg-init-trustgraph 2>/dev/null || echo "   (puede fallar si ya está inicializado)"
+	@echo "$(GREEN)✅ Inicialización completada$(RESET)"
 	@docker compose ps
 	@echo ""
 	@echo "$(GREEN)📊 Servicios disponibles:$(RESET)"

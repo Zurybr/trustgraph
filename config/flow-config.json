@@ -1,0 +1,14 @@
+{
+  "flows": [
+    {
+      "id": "default-query",
+      "services": [
+        {
+          "kind": "graph-rag",
+          "request": "tg/request/graph-rag",
+          "response": "tg/response/default-query"
+        }
+      ]
+    }
+  ]
+}
